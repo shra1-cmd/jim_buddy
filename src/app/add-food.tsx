@@ -74,8 +74,11 @@ export default function AddFood() {
         style={ui.input}
         returnKeyType="search"
       />
-      <View style={{ flexDirection: 'row', marginTop: space.md }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: space.md }}>
         <Chip label="Quick add kcal" onPress={() => setMode('quick')} />
+        <Chip label="Describe it" onPress={() => router.replace({ pathname: '/scan', params: { date, slot, mode: 'text' } })} />
+        <Chip label="Scan meal" onPress={() => router.replace({ pathname: '/scan', params: { date, slot, mode: 'photo' } })} />
+        <Chip label="Scan label" onPress={() => router.replace({ pathname: '/scan', params: { date, slot, mode: 'label' } })} />
       </View>
       <Text style={[type.label, { marginTop: space.sm, marginBottom: space.sm }]}>
         {query.trim() ? `RESULTS (${results.length})` : recents.length ? 'RECENT' : 'START TYPING TO SEARCH 1,000+ INDIAN FOODS'}

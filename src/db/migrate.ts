@@ -14,7 +14,7 @@ type SeedFood = {
   ug: number | null;
 };
 
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 /** Runs on app start (SQLiteProvider onInit). Versioned with PRAGMA user_version. */
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
@@ -87,6 +87,93 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       await insert.finalizeAsync();
     }
     version = 1;
+  }
+
+  if (version === 1) {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS custom_exercise (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        grp TEXT NOT NULL,
+        equipment TEXT NOT NULL,
+        log_type TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS workout_plan (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        days TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS plan_exercise (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plan_id TEXT NOT NULL,
+        exercise_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        sets INTEGER NOT NULL DEFAULT 3,
+        rep_min INTEGER NOT NULL DEFAULT 8,
+        rep_max INTEGER NOT NULL DEFAULT 12,
+        rest_s INTEGER NOT NULL DEFAULT 90
+      );
+      CREATE INDEX IF NOT EXISTS plan_exercise_plan_idx ON plan_exercise(plan_id, position);
+      CREATE TABLE IF NOT EXISTS workout_session (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plan_id TEXT,
+        name TEXT NOT NULL,
+        local_date TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        kcal REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active'
+      );
+      CREATE INDEX IF NOT EXISTS workout_session_day_idx ON workout_session(local_date);
+      CREATE TABLE IF NOT EXISTS set_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL,
+        exercise_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        set_no INTEGER NOT NULL,
+        kg REAL,
+        reps INTEGER,
+        seconds INTEGER,
+        distance_m REAL,
+        is_warmup INTEGER NOT NULL DEFAULT 0,
+        done INTEGER NOT NULL DEFAULT 0,
+        rep_min INTEGER, rep_max INTEGER, rest_s INTEGER,
+        done_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS set_log_session_idx ON set_log(session_id, position, set_no);
+      CREATE INDEX IF NOT EXISTS set_log_exercise_idx ON set_log(exercise_id, done_at);
+      ALTER TABLE body_entry ADD COLUMN chest_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN arm_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN thigh_cm REAL;
+      CREATE TABLE IF NOT EXISTS progress_photo (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        local_date TEXT NOT NULL,
+        angle TEXT NOT NULL,
+        uri TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS scan_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        local_date TEXT NOT NULL,
+        slot TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        image_uri TEXT,
+        text TEXT,
+        hint TEXT,
+        place TEXT,
+        oil TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        error TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+      );
+    `);
+    version = 2;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

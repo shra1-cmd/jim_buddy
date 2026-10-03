@@ -27,6 +27,12 @@ export interface Exercise {
   alternatives: string[];
 }
 
+export const MUSCLE_LABEL: Record<string, string> = {
+  chest: 'Chest', deltoids: 'Shoulders', biceps: 'Biceps', triceps: 'Triceps', forearm: 'Forearms', abs: 'Abs',
+  obliques: 'Obliques', quadriceps: 'Quads', hamstring: 'Hamstrings', gluteal: 'Glutes', calves: 'Calves',
+  adductors: 'Adductors', trapezius: 'Traps', 'upper-back': 'Upper back', 'lower-back': 'Lower back',
+};
+
 export const GROUPS: { id: Group; label: string }[] = [
   { id: 'chest', label: 'Chest' },
   { id: 'back', label: 'Back' },
@@ -134,11 +140,32 @@ export const EXERCISES: Exercise[] = [
     cues: ['Whole foot on each step', 'Light hands on the rails', 'Steady pace you can hold'], mistakes: ['Leaning on the rails', 'Tiptoe steps'], alternatives: ['incline_walk'] },
 ];
 
-export const exerciseById = (id: string) => EXERCISES.find((e) => e.id === id);
+// Custom exercises (from the database) are registered here so every screen can look them up synchronously.
+let CUSTOM: Exercise[] = [];
+export function setCustomExercises(list: Exercise[]) {
+  CUSTOM = list;
+}
+export const allExercises = () => [...EXERCISES, ...CUSTOM];
+export const exerciseById = (id: string) => EXERCISES.find((e) => e.id === id) ?? CUSTOM.find((e) => e.id === id);
+
+export function makeCustomExercise(row: { id: string; name: string; grp: string; equipment: string; log_type: string }): Exercise {
+  const muscle: Record<string, MuscleSlug> = {
+    chest: 'chest', back: 'upper-back', shoulders: 'deltoids', biceps: 'biceps', triceps: 'triceps',
+    quads: 'quadriceps', hamstrings: 'hamstring', core: 'abs', cardio: 'quadriceps',
+  };
+  return {
+    id: row.id, name: row.name, group: row.grp as Group, primary: [muscle[row.grp] ?? 'abs'], secondary: [],
+    equipment: row.equipment as Exercise['equipment'], logType: row.log_type as LogType, reps: row.log_type === 'time' ? '30–60 s' : '8–12',
+    restSec: row.grp === 'cardio' ? 0 : 90, incrementKg: row.log_type === 'weight_reps' || row.log_type === 'assisted' ? 2.5 : 0,
+    met: row.grp === 'cardio' ? 6 : 3.5, cues: ['Your own exercise', 'Add cues in a later version', 'Log it like any other'],
+    mistakes: ['—', '—'], alternatives: [],
+  };
+}
 
 export function exercisesForMuscle(slug: string): Exercise[] {
-  const primary = EXERCISES.filter((e) => e.primary.includes(slug as MuscleSlug));
-  const secondary = EXERCISES.filter((e) => !e.primary.includes(slug as MuscleSlug) && e.secondary.includes(slug as MuscleSlug));
+  const all = allExercises();
+  const primary = all.filter((e) => e.primary.includes(slug as MuscleSlug));
+  const secondary = all.filter((e) => !e.primary.includes(slug as MuscleSlug) && e.secondary.includes(slug as MuscleSlug));
   return [...primary, ...secondary];
 }
 

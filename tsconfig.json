@@ -5,7 +5,8 @@
   },
   "exclude": [
     "tests",
-    "node_modules"
+    "node_modules",
+    "proxy"
   ],
   "include": [
     "**/*.ts",

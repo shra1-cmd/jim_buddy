@@ -1,4 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { rankCandidates, tokens } from '../lib/grounding';
 import { forGrams, type Nutrients } from '../lib/nutrition';
 import type { BodyStats, Targets } from '../lib/targets';
 
@@ -184,4 +185,57 @@ export async function bodyEntries(db: SQLiteDatabase, limit = 60): Promise<BodyE
     'SELECT local_date, weight_kg, waist_cm FROM body_entry WHERE weight_kg IS NOT NULL ORDER BY local_date DESC LIMIT ?',
     limit,
   );
+}
+
+// ---------- AI grounding + scan queue ----------
+
+/** Candidate foods for a model-named item: SQL prefilter on its words, then ranked in JS. */
+export async function candidatesFor(db: SQLiteDatabase, name: string, limit = 5): Promise<(Food & { score: number })[]> {
+  const words = tokens(name).slice(0, 4);
+  if (!words.length) return [];
+  const where = words.map(() => 'name LIKE ?').join(' OR ');
+  const rows = await db.getAllAsync<Food>(`SELECT * FROM food WHERE ${where} LIMIT 200`, ...words.map((w) => `%${w}%`));
+  return rankCandidates(name, rows, limit);
+}
+
+export async function getFood(db: SQLiteDatabase, id: string): Promise<Food | null> {
+  return db.getFirstAsync<Food>('SELECT * FROM food WHERE id = ?', id);
+}
+
+/** Save a confirmed AI line item (grams-based). */
+export async function addAiItem(db: SQLiteDatabase, date: string, slot: Slot, food: Food, grams: number) {
+  const n = forGrams({ k: food.kcal, p: food.protein, c: food.carbs, f: food.fat, fb: food.fiber }, grams);
+  const unitQty = food.unit && food.unit_grams ? Math.round((grams / food.unit_grams) * 10) / 10 : null;
+  await db.runAsync(
+    `INSERT INTO meal_item (local_date, slot, food_id, name, qty, unit, grams, kcal, protein, carbs, fat, fiber, source, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ai', ?)`,
+    date, slot, food.id, food.name, unitQty ?? Math.round(grams), unitQty != null ? food.unit : null, grams,
+    n.kcal, n.protein, n.carbs, n.fat, n.fiber, now(),
+  );
+}
+
+export interface QueuedScan {
+  id: number;
+  local_date: string;
+  slot: Slot;
+  kind: 'photo' | 'text' | 'label';
+  image_uri: string | null;
+  text: string | null;
+  hint: string | null;
+  place: string | null;
+  oil: string | null;
+  status: 'pending' | 'error';
+  error: string | null;
+}
+
+export async function queueScan(db: SQLiteDatabase, q: Omit<QueuedScan, 'id' | 'status' | 'error'>) {
+  await db.runAsync(
+    'INSERT INTO scan_queue (local_date, slot, kind, image_uri, text, hint, place, oil, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    q.local_date, q.slot, q.kind, q.image_uri, q.text, q.hint, q.place, q.oil, now(),
+  );
+}
+export const pendingScans = (db: SQLiteDatabase) => db.getAllAsync<QueuedScan>('SELECT * FROM scan_queue ORDER BY created_at');
+export const getQueuedScan = (db: SQLiteDatabase, id: number) => db.getFirstAsync<QueuedScan>('SELECT * FROM scan_queue WHERE id = ?', id);
+export async function deleteQueuedScan(db: SQLiteDatabase, id: number) {
+  await db.runAsync('DELETE FROM scan_queue WHERE id = ?', id);
 }

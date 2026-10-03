@@ -3,9 +3,16 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Svg, { Circle, Polyline } from 'react-native-svg';
-import { Button, Card, SectionLabel, styles as ui } from '../../components/ui';
+import { BodyMap } from '../../components/BodyMap';
+import { MiniLine } from '../../components/MiniLine';
+import { Button, Card, Chip, SectionLabel, styles as ui } from '../../components/ui';
+import { exerciseById, MUSCLE_LABEL } from '../../data/exercises';
+import { listPhotos, measurementEntries, topLifts } from '../../db/body';
 import { bodyEntries, getProfile, saveWeight, type BodyEntry, type Profile } from '../../db/queries';
-import { fromKey, todayKey } from '../../lib/dates';
+import { doneSetsSince, exerciseHistory } from '../../db/training';
+import { weekStartKey } from '../../lib/balance';
+import { bestE1rm, setsPerMuscle } from '../../lib/training';
+import { todayKey } from '../../lib/dates';
 import { movingAverage, weeklyRate, type Point } from '../../lib/progress';
 import { GOALS } from '../../lib/targets';
 import { colors, radius, space, type } from '../../theme';
@@ -15,11 +22,40 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [entries, setEntries] = useState<BodyEntry[]>([]);
   const [weight, setWeight] = useState('');
+  const [waist, setWaist] = useState<{ last: number; change: number | null } | null>(null);
+  const [photoCount, setPhotoCount] = useState(0);
+  const [lifts, setLifts] = useState<{ id: string; name: string; points: Point[] }[]>([]);
+  const [muscles, setMuscles] = useState<Record<string, number>>({});
+  const [side, setSide] = useState<'front' | 'back'>('front');
 
   const load = useCallback(async () => {
-    const [p, e] = await Promise.all([getProfile(db), bodyEntries(db, 90)]);
+    const [p, e, m, ph, top, weekSets] = await Promise.all([
+      getProfile(db), bodyEntries(db, 90), measurementEntries(db, 60), listPhotos(db), topLifts(db, 4),
+      doneSetsSince(db, weekStartKey(new Date())),
+    ]);
     setProfile(p);
     setEntries(e);
+    const w = m.filter((r) => r.waist_cm != null);
+    setWaist(w.length ? { last: w[0].waist_cm!, change: w.length > 1 ? Math.round((w[0].waist_cm! - w[w.length - 1].waist_cm!) * 10) / 10 : null } : null);
+    setPhotoCount(ph.length);
+    setMuscles(setsPerMuscle(weekSets, (id) => exerciseById(id)));
+    const ids = top.length ? top : [];
+    setLifts(
+      await Promise.all(
+        ids.map(async (id) => {
+          const rows = await exerciseHistory(db, id, 20);
+          const bySession = new Map<number, typeof rows>();
+          rows.forEach((r) => bySession.set(r.session_id, [...(bySession.get(r.session_id) ?? []), r]));
+          const points: Point[] = [];
+          bySession.forEach((sets) => {
+            const v = bestE1rm(sets);
+            if (v != null) points.push({ date: sets[0].local_date, value: v });
+          });
+          points.sort((a, b) => a.date.localeCompare(b.date));
+          return { id, name: exerciseById(id)?.name ?? id, points };
+        }),
+      ),
+    );
   }, [db]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -51,7 +87,12 @@ export default function ProfileScreen() {
           <Text style={{ color: colors.amber, fontSize: 26, fontWeight: '800' }}>{(profile?.name || 'J').slice(0, 1).toUpperCase()}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={type.h2}>{profile?.name || 'You'}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={type.h2}>{profile?.name || 'You'}</Text>
+            <Pressable onPress={() => router.push('/settings')} accessibilityLabel="Settings" hitSlop={10}>
+              <Text style={{ color: colors.steel, fontWeight: '700' }}>Settings ›</Text>
+            </Pressable>
+          </View>
           <Text style={type.small}>{goalLabel}</Text>
           <Pressable onPress={() => router.push('/onboarding')} style={{ marginTop: 6, alignSelf: 'flex-start', backgroundColor: colors.amberSoft, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 }}>
             <Text style={{ fontWeight: '700', color: colors.ink, fontSize: 13 }}>
@@ -82,27 +123,70 @@ export default function ProfileScreen() {
         </View>
         <Text style={[type.small, { marginTop: space.sm }]}>
           Weigh in the morning. Daily numbers swing with water; watch the average line. During a recomposition, waist and strength
-          trends (coming in Phase 4) matter more than the scale.
+          trends matter more than the scale.
         </Text>
       </Card>
 
-      <SectionLabel>Recent entries</SectionLabel>
+      <SectionLabel>Body</SectionLabel>
       <Card>
-        {entries.length === 0 && <Text style={type.small}>No entries yet.</Text>}
-        {entries.slice(0, 10).map((e) => (
-          <View key={e.local_date} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
-            <Text style={type.body}>{fromKey(e.local_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</Text>
-            <Text style={[type.body, { fontWeight: '600' }]}>{e.weight_kg} kg</Text>
-          </View>
-        ))}
+        <Row title="Measurements" sub={waist ? `Waist ${waist.last} cm${waist.change != null ? ` (${waist.change > 0 ? '+' : ''}${waist.change} since first)` : ''}` : 'Waist, chest, arm, thigh'} onPress={() => router.push('/measurements')} />
+        <View style={{ height: 1, backgroundColor: colors.line }} />
+        <Row title="Progress photos" sub={photoCount ? `${photoCount} photo${photoCount > 1 ? 's' : ''} · compare side by side` : 'Front, side, back'} onPress={() => router.push('/photos')} />
       </Card>
 
-      <SectionLabel>Credits</SectionLabel>
-      <Text style={type.small}>
-        Food data: Indian Nutrient Databank (INDB), CC BY, built on ICMR-NIN food composition tables. Basic foods use typical
-        values.
-      </Text>
+      <SectionLabel>Strength (estimated 1-rep max)</SectionLabel>
+      <Card>
+        {lifts.length === 0 && <Text style={type.small}>Finish a workout with weighted sets to see your strength trend.</Text>}
+        {lifts.map((l) => {
+          const last = l.points[l.points.length - 1];
+          const first = l.points[0];
+          const diff = last && first && l.points.length > 1 ? Math.round((last.value - first.value) * 10) / 10 : null;
+          return (
+            <Pressable key={l.id} onPress={() => router.push(`/exercise/${l.id}`)} style={{ marginBottom: space.md }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={[type.body, { fontWeight: '600', flex: 1 }]} numberOfLines={1}>{l.name}</Text>
+                <Text style={[type.body, { fontWeight: '800' }]}>
+                  {last ? `${last.value} kg` : '—'}
+                  {diff != null ? <Text style={{ color: diff >= 0 ? colors.good : colors.danger, fontWeight: '600' }}>{`  ${diff >= 0 ? '+' : ''}${diff}`}</Text> : null}
+                </Text>
+              </View>
+              <MiniLine points={l.points} height={36} empty={null} />
+            </Pressable>
+          );
+        })}
+      </Card>
+
+      <SectionLabel>Muscles this week</SectionLabel>
+      <Card>
+        <View style={{ flexDirection: 'row', marginBottom: space.sm }}>
+          <Chip label="Front" selected={side === 'front'} onPress={() => setSide('front')} />
+          <Chip label="Back" selected={side === 'back'} onPress={() => setSide('back')} />
+        </View>
+        <View style={{ alignItems: 'center' }}>
+          <BodyMap side={side} scale={0.8} levels={Object.fromEntries(Object.entries(muscles).map(([k, v]) => [k, v >= 10 ? 2 : 1])) as Record<string, 1 | 2>} />
+        </View>
+        {Object.keys(muscles).length === 0 ? (
+          <Text style={type.small}>No sets logged since Monday.</Text>
+        ) : (
+          <Text style={type.small}>
+            {Object.entries(muscles).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${MUSCLE_LABEL[k] ?? k} ${v}`).join(' · ')}
+            {'\n'}Hard sets since Monday (secondary muscles count half). Dark amber = 10+, a good weekly dose for growth.
+          </Text>
+        )}
+      </Card>
     </ScrollView>
+  );
+}
+
+function Row({ title, sub, onPress }: { title: string; sub: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={{ paddingVertical: space.sm, flexDirection: 'row', alignItems: 'center' }} accessibilityRole="button">
+      <View style={{ flex: 1 }}>
+        <Text style={[type.body, { fontWeight: '600' }]}>{title}</Text>
+        <Text style={type.small}>{sub}</Text>
+      </View>
+      <Text style={{ color: colors.steel, fontSize: 20 }}>›</Text>
+    </Pressable>
   );
 }
 

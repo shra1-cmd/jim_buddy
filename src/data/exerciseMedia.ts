@@ -1,0 +1,27 @@
+// Generated: start/end drawings adapted from Everkinetic (CC BY-SA 4.0). See assets/exercises/LICENSE.md.
+// Exercises not listed here fall back to the muscle map until a 3D loop or Lottie exists.
+export const EXERCISE_MEDIA: Record<string, [number, number]> = {
+  bench_press_bb: [require('../../assets/exercises/bench_press_bb_0.png'), require('../../assets/exercises/bench_press_bb_1.png')],
+  incline_db_press: [require('../../assets/exercises/incline_db_press_0.png'), require('../../assets/exercises/incline_db_press_1.png')],
+  machine_chest_press: [require('../../assets/exercises/machine_chest_press_0.png'), require('../../assets/exercises/machine_chest_press_1.png')],
+  cable_fly: [require('../../assets/exercises/cable_fly_0.png'), require('../../assets/exercises/cable_fly_1.png')],
+  push_up: [require('../../assets/exercises/push_up_0.png'), require('../../assets/exercises/push_up_1.png')],
+  pull_up: [require('../../assets/exercises/pull_up_0.png'), require('../../assets/exercises/pull_up_1.png')],
+  seated_cable_row: [require('../../assets/exercises/seated_cable_row_0.png'), require('../../assets/exercises/seated_cable_row_1.png')],
+  deadlift: [require('../../assets/exercises/deadlift_0.png'), require('../../assets/exercises/deadlift_1.png')],
+  lateral_raise: [require('../../assets/exercises/lateral_raise_0.png'), require('../../assets/exercises/lateral_raise_1.png')],
+  barbell_curl: [require('../../assets/exercises/barbell_curl_0.png'), require('../../assets/exercises/barbell_curl_1.png')],
+  incline_db_curl: [require('../../assets/exercises/incline_db_curl_0.png'), require('../../assets/exercises/incline_db_curl_1.png')],
+  hammer_curl: [require('../../assets/exercises/hammer_curl_0.png'), require('../../assets/exercises/hammer_curl_1.png')],
+  cable_curl: [require('../../assets/exercises/cable_curl_0.png'), require('../../assets/exercises/cable_curl_1.png')],
+  rope_pushdown: [require('../../assets/exercises/rope_pushdown_0.png'), require('../../assets/exercises/rope_pushdown_1.png')],
+  close_grip_bench: [require('../../assets/exercises/close_grip_bench_0.png'), require('../../assets/exercises/close_grip_bench_1.png')],
+  dips: [require('../../assets/exercises/dips_0.png'), require('../../assets/exercises/dips_1.png')],
+  back_squat: [require('../../assets/exercises/back_squat_0.png'), require('../../assets/exercises/back_squat_1.png')],
+  leg_press: [require('../../assets/exercises/leg_press_0.png'), require('../../assets/exercises/leg_press_1.png')],
+  leg_extension: [require('../../assets/exercises/leg_extension_0.png'), require('../../assets/exercises/leg_extension_1.png')],
+  romanian_deadlift: [require('../../assets/exercises/romanian_deadlift_0.png'), require('../../assets/exercises/romanian_deadlift_1.png')],
+  leg_curl: [require('../../assets/exercises/leg_curl_0.png'), require('../../assets/exercises/leg_curl_1.png')],
+  standing_calf_raise: [require('../../assets/exercises/standing_calf_raise_0.png'), require('../../assets/exercises/standing_calf_raise_1.png')],
+  side_plank: [require('../../assets/exercises/side_plank_0.png'), require('../../assets/exercises/side_plank_1.png')],
+};

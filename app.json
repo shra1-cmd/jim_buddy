@@ -34,6 +34,20 @@
           "backgroundColor": "#131B2E",
           "resizeMode": "contain"
         }
+      ],
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "JimBuddy uses your photos to estimate meals and keep progress photos.",
+          "cameraPermission": "JimBuddy uses the camera to scan meals, food labels and progress photos."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#FFB020"
+        }
       ]
     ],
     "scheme": "jimbuddy",

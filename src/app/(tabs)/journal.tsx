@@ -5,9 +5,10 @@ import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { CameraIcon } from '../../components/TabIcons';
 import { Bar, Card, Ring } from '../../components/ui';
 import {
-  SLOT_LABEL, SLOT_SHARE, SLOTS, copyMeal, deleteMealItem, getProfile, mealItemsForDay,
-  type MealItem, type Profile, type Slot,
+  SLOT_LABEL, SLOT_SHARE, SLOTS, copyMeal, deleteMealItem, getProfile, mealItemsForDay, pendingScans,
+  type MealItem, type Profile, type QueuedScan, type Slot,
 } from '../../db/queries';
+import { burnedOn } from '../../db/training';
 import { addDays, dayLabel, todayKey } from '../../lib/dates';
 import { quantityLabel, sum } from '../../lib/nutrition';
 import { caloriesLeft } from '../../lib/targets';
@@ -18,11 +19,15 @@ export default function JournalScreen() {
   const [date, setDate] = useState(todayKey());
   const [items, setItems] = useState<MealItem[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [burned, setBurned] = useState(0);
+  const [pending, setPending] = useState<QueuedScan[]>([]);
 
   const load = useCallback(async () => {
-    const [p, rows] = await Promise.all([getProfile(db), mealItemsForDay(db, date)]);
+    const [p, rows, b, q] = await Promise.all([getProfile(db), mealItemsForDay(db, date), burnedOn(db, date), pendingScans(db)]);
     setProfile(p);
     setItems(rows);
+    setBurned(b);
+    setPending(q);
   }, [db, date]);
 
   useFocusEffect(
@@ -32,7 +37,6 @@ export default function JournalScreen() {
   );
 
   const totals = useMemo(() => sum(items), [items]);
-  const burned = 0; // Workouts and health sync arrive in Phases 2–3.
   const target = profile?.kcal ?? 2000;
   const left = caloriesLeft(target, totals.kcal, burned, profile?.eatBackPct ?? 50);
 
@@ -90,14 +94,24 @@ export default function JournalScreen() {
 
       <Pressable
         accessibilityRole="button"
-        onPress={() =>
-          Alert.alert('Scan meal', 'Photo-to-food scanning arrives in Phase 3, through the AI proxy. For now use search, saved foods or quick add.')
-        }
+        onPress={() => router.push({ pathname: '/scan', params: { date, slot: slotForNow() } })}
         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.amber, borderRadius: radius.md, height: 46, marginBottom: space.md }}
       >
         <CameraIcon color={colors.ink} />
         <Text style={{ fontWeight: '700', color: colors.ink }}>Scan meal</Text>
       </Pressable>
+
+      {pending.length > 0 && (
+        <Card style={{ borderColor: colors.amber, borderWidth: 2 }}>
+          <Text style={type.h2}>{pending.length} scan{pending.length > 1 ? 's' : ''} pending</Text>
+          <Text style={[type.small, { marginBottom: 8 }]}>Saved while offline. Not counted until you confirm them.</Text>
+          {pending.map((q) => (
+            <Pressable key={q.id} onPress={() => router.push({ pathname: '/scan', params: { date: q.local_date, slot: q.slot, mode: q.kind, queueId: String(q.id) } })} style={{ paddingVertical: 6 }}>
+              <Text style={{ color: colors.steel, fontWeight: '700' }}>Analyse {SLOT_LABEL[q.slot].toLowerCase()} · {q.local_date}  ›</Text>
+            </Pressable>
+          ))}
+        </Card>
+      )}
 
       {SLOTS.map((slot) => {
         const slotItems = items.filter((i) => i.slot === slot);
@@ -135,6 +149,14 @@ export default function JournalScreen() {
       })}
     </ScrollView>
   );
+}
+
+function slotForNow(): Slot {
+  const h = new Date().getHours();
+  if (h < 11) return 'breakfast';
+  if (h < 16) return 'lunch';
+  if (h < 19) return 'snacks';
+  return 'dinner';
 }
 
 function Stat({ value, label }: { value: number; label: string }) {
