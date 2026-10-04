@@ -45,11 +45,11 @@ exercise animations, cloud sync between phones.
 - **Starter templates** sit behind a button on Train → Workouts.
 - **Editable targets.** Tap the kcal/protein pill on Profile and type your own numbers. Carbs, fat and fiber follow.
   "Use suggested" restores the calculated values.
-- **Scan meal → ChatGPT app** (no API key):
-  1. JimBuddy copies a standard prompt and sends the photo to the ChatGPT app through the share sheet. Describe-it opens
-     ChatGPT with the prompt already typed in.
-  2. Copy ChatGPT's table, then tap "Paste ChatGPT's answer". You can adjust grams before saving.
-  - The Cloudflare proxy is now optional (Settings → Advanced).
+- **Scan meal → ChatGPT app** (no API key, no camera inside JimBuddy):
+  1. "Open ChatGPT" opens it with the standard prompt filled in. The prompt is also copied, in case it doesn't fill in.
+  2. Take the photo with ChatGPT's own camera and send.
+  3. Copy the reply and switch back. JimBuddy spots the table on the clipboard and loads it automatically.
+  - Camera/Gallery only show up when the optional proxy is set up (Settings → Advanced).
 - The Home "protein fix" suggestion has been removed.
 
 ## Optional: in-app scan via your own proxy

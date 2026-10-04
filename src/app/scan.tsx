@@ -1,9 +1,8 @@
 import * as Clipboard from 'expo-clipboard';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, Image, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Button, Card, Chip, SectionLabel, styles as ui } from '../components/ui';
 import {
   SLOT_LABEL, addAiItem, addEstimate, addFoodToMeal, candidatesFor, createCustomFood, deleteQueuedScan, getFood, getQueuedScan, queueScan,
@@ -90,22 +89,34 @@ export default function Scan() {
       // clipboard unavailable (web without permission) – the prompt is also shown on screen
     }
     setAsked(true);
-    if (mode === 'text') {
-      // Opens the ChatGPT app (or chatgpt.com) with the prompt typed in.
-      await Linking.openURL(`https://chatgpt.com/?q=${encodeURIComponent(prompt)}`).catch(() => {});
-      return;
-    }
-    if (!photo) return;
-    if (Platform.OS === 'web' || !(await Sharing.isAvailableAsync())) {
-      Alert.alert('Prompt copied', 'Open ChatGPT, attach this photo, paste the prompt and send.');
-      return;
-    }
-    Alert.alert(
-      'Prompt copied ✓',
-      'In the share sheet pick ChatGPT. Then long-press the message box → Paste, and send. Copy ChatGPT’s table and come back here.',
-      [{ text: 'Open share sheet', onPress: () => Sharing.shareAsync(photo.uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Send to ChatGPT' }).catch(() => {}) }],
-    );
+    // Opens the ChatGPT app (or chatgpt.com) with the prompt filled in; it's on the clipboard too in case it isn't.
+    await Linking.openURL(`https://chatgpt.com/?q=${encodeURIComponent(prompt)}`).catch(() => {
+      Alert.alert('Prompt copied', 'Open the ChatGPT app and paste it.');
+    });
   };
+
+  // Auto-import: when you come back from ChatGPT with its table copied, load it without another tap.
+  const lastClip = useRef('');
+  useEffect(() => {
+    if (!asked || estimates) return;
+    const check = async () => {
+      try {
+        if (!(await Clipboard.hasStringAsync())) return;
+        const txt = (await Clipboard.getStringAsync()) || '';
+        if (!txt || txt === lastClip.current) return;
+        lastClip.current = txt;
+        const items = parseChatGptReply(txt);
+        if (items.length) {
+          setReply(txt);
+          setEstimates(items.map((it, i) => ({ ...it, key: `${i}`, base: it })));
+        }
+      } catch {
+        // clipboard read refused (iOS "Allow Paste" → Don't Allow) – the Paste button still works
+      }
+    };
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') check(); });
+    return () => sub.remove();
+  }, [asked, estimates]);
 
   const readReply = async (fromClipboard: boolean) => {
     let txt = reply;
@@ -282,6 +293,7 @@ export default function Scan() {
     );
   }
 
+  const canAsk = mode === 'text' ? text.trim().length > 2 : true;
   const canAnalyse = mode === 'text' ? text.trim().length > 2 : !!photo;
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -302,6 +314,16 @@ export default function Scan() {
             placeholderTextColor={colors.muted}
             style={[ui.input, { height: 110, paddingTop: 12, textAlignVertical: 'top', marginBottom: space.md }]}
           />
+        ) : !proxyUrl ? (
+          <Card>
+            <Text style={type.h2}>{mode === 'label' ? 'Snap the label in ChatGPT' : 'Snap your plate in ChatGPT'}</Text>
+            <Text style={[type.small, { marginTop: space.sm }]}>
+              1. Tap Open ChatGPT (the prompt is filled in and copied).{'\n'}
+              2. In ChatGPT tap ＋ → Camera and {mode === 'label' ? 'photograph the nutrition table' : 'fit the whole plate in'}.{'\n'}
+              3. If the box is empty, long-press → Paste. Send.{'\n'}
+              4. Tap Copy under the reply and come back. JimBuddy loads it automatically.
+            </Text>
+          </Card>
         ) : (
           <>
             {photo ? (
@@ -330,15 +352,17 @@ export default function Scan() {
           </>
         )}
 
-        <Button title={asked ? 'Ask ChatGPT again' : 'Ask ChatGPT'} variant={asked ? 'ghost' : 'primary'} onPress={askChatGpt} disabled={!canAnalyse} style={{ marginTop: space.md }} />
+        <Button title={asked ? 'Open ChatGPT again' : 'Open ChatGPT'} variant={asked ? 'ghost' : 'primary'} onPress={askChatGpt} disabled={!canAsk} style={{ marginTop: space.md }} />
         <Text style={[type.small, { marginTop: space.sm, textAlign: 'center' }]}>
-          {mode === 'text' ? 'Opens ChatGPT with the question filled in.' : 'Copies a ready-made prompt and sends the photo to your ChatGPT app.'} Uses your own ChatGPT account, no API key.
+          Uses your own ChatGPT account. No API key, nothing stored online by JimBuddy.
         </Text>
 
         {asked && (
           <Card style={{ marginTop: space.md, borderColor: colors.amber, borderWidth: 2 }}>
             <Text style={type.h2}>2 · Bring back ChatGPT’s answer</Text>
-            <Text style={[type.small, { marginVertical: space.sm }]}>In ChatGPT, tap Copy under its reply, then come back here.</Text>
+            <Text style={[type.small, { marginVertical: space.sm }]}>
+              Tap Copy under ChatGPT’s reply and switch back: it loads by itself. If iPhone asks, choose Allow Paste. Or use the button.
+            </Text>
             <Button title="Paste ChatGPT’s answer" onPress={() => readReply(true)} />
             <TextInput
               value={reply}
