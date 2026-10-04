@@ -64,10 +64,17 @@ export default function Settings() {
     <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
       <Stack.Screen options={{ title: 'Settings' }} />
 
-      <SectionLabel>Meal scan service</SectionLabel>
+      <SectionLabel>Your data</SectionLabel>
+      <Text style={[type.small, { marginBottom: space.lg }]}>
+        Everything (profile, food log, workouts, steps, photos) is stored only in this phone’s local database. There is no
+        JimBuddy account or cloud server. Meal scans go through your own ChatGPT app.
+      </Text>
+
+      <SectionLabel>Advanced: in-app scan service (optional)</SectionLabel>
       <Card>
         <Text style={[type.small, { marginBottom: space.sm }]}>
-          Paste the proxy URL and your invite token from whoever runs the JimBuddy proxy (see proxy/README.md).
+          Not needed: Scan meal uses your ChatGPT app. Only fill this if you deploy the optional proxy (proxy/README.md) to
+          analyse photos inside JimBuddy with an OpenAI API key.
         </Text>
         <TextInput value={url} onChangeText={setUrl} autoCapitalize="none" autoCorrect={false} placeholder="https://jimbuddy-proxy.you.workers.dev" placeholderTextColor={colors.muted} style={[ui.input, { marginBottom: space.sm }]} />
         <TextInput value={token} onChangeText={setToken} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="Invite token" placeholderTextColor={colors.muted} style={[ui.input, { marginBottom: space.md }]} />

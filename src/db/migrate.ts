@@ -14,7 +14,7 @@ type SeedFood = {
   ug: number | null;
 };
 
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 /** Runs on app start (SQLiteProvider onInit). Versioned with PRAGMA user_version. */
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
@@ -174,6 +174,20 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       );
     `);
     version = 2;
+  }
+
+  if (version === 2) {
+    // v3: daily steps (from the phone's pedometer or typed in)
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS step_day (
+        local_date TEXT PRIMARY KEY NOT NULL,
+        steps INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      ALTER TABLE workout_session ADD COLUMN kind TEXT NOT NULL DEFAULT 'lift';
+    `);
+    version = 3;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

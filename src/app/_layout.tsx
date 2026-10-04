@@ -49,7 +49,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ title: 'Your targets' }} />
           <Stack.Screen name="add-food" options={{ presentation: 'modal', title: 'Add food' }} />
-          <Stack.Screen name="scan" options={{ presentation: 'modal', title: 'Scan meal' }} />
+          <Stack.Screen name="scan" options={{ title: 'Scan meal' }} />
           <Stack.Screen name="exercise-picker" options={{ presentation: 'modal', title: 'Add exercises' }} />
           <Stack.Screen name="exercise/[id]" options={{ title: '' }} />
           <Stack.Screen name="plan/[id]" options={{ title: 'Edit plan' }} />

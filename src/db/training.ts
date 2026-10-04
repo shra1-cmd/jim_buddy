@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { STARTER_TEMPLATES, exerciseById, makeCustomExercise, setCustomExercises, type Exercise } from '../data/exercises';
 import { todayKey } from '../lib/dates';
+import { stepBaseline, stepsKcal } from '../lib/activity';
 import { sessionKcal, suggestLoad, type LogType } from '../lib/training';
 
 const now = () => new Date().toISOString();
@@ -30,6 +31,7 @@ export interface Session {
   ended_at: string | null;
   kcal: number;
   status: 'active' | 'done';
+  kind?: 'lift' | 'sport';
 }
 export interface SetRow {
   id: number;
@@ -267,11 +269,32 @@ export async function sessionsHistory(db: SQLiteDatabase, limit = 50) {
   );
 }
 
+export interface Burn {
+  workouts: number; // gym sessions
+  sports: number;
+  steps: number; // kcal from steps above the baseline
+  stepCount: number;
+  total: number;
+}
+
+/** Everything burned on a day: workouts + games + extra steps (all net of resting). */
+export async function burnBreakdown(db: SQLiteDatabase, date: string): Promise<Burn> {
+  const [w, st, p] = await Promise.all([
+    db.getAllAsync<{ kind: string; k: number | null }>(
+      "SELECT kind, SUM(kcal) AS k FROM workout_session WHERE local_date = ? AND status = 'done' GROUP BY kind", date,
+    ),
+    db.getFirstAsync<{ steps: number }>('SELECT steps FROM step_day WHERE local_date = ?', date),
+    db.getFirstAsync<{ weight_kg: number; activity: number }>('SELECT weight_kg, activity FROM user_profile WHERE id = 1'),
+  ]);
+  const workouts = Math.round(w.find((r) => r.kind !== 'sport')?.k ?? 0);
+  const sports = Math.round(w.find((r) => r.kind === 'sport')?.k ?? 0);
+  const stepCount = st?.steps ?? 0;
+  const steps = p ? stepsKcal(stepCount, p.weight_kg, stepBaseline(p.activity)) : 0;
+  return { workouts, sports, steps, stepCount, total: workouts + sports + steps };
+}
+
 export async function burnedOn(db: SQLiteDatabase, date: string): Promise<number> {
-  const r = await db.getFirstAsync<{ k: number | null }>(
-    "SELECT SUM(kcal) AS k FROM workout_session WHERE local_date = ? AND status = 'done'", date,
-  );
-  return Math.round(r?.k ?? 0);
+  return (await burnBreakdown(db, date)).total;
 }
 
 export async function doneSetsSince(db: SQLiteDatabase, fromDate: string) {

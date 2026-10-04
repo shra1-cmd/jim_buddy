@@ -1,18 +1,22 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { BodyMap } from '../../components/BodyMap';
-import { Button, Card, Chip, SectionLabel } from '../../components/ui';
+import { Button, Card, Chip, SectionLabel, styles as ui } from '../../components/ui';
 import { GROUPS, MUSCLE_LABEL, STARTER_TEMPLATES, allExercises, exercisesForMuscle, type Exercise } from '../../data/exercises';
+import { clearManualSteps, deleteSport, getSteps, logSport, setManualSteps, sportsOn, syncPhoneSteps, type StepSync } from '../../db/activity';
+import { getProfile, type Profile } from '../../db/queries';
 import {
-  activeSession, createPlan, createPlanFromTemplate, listPlans, loadCustomExercises, startSession,
-  type Plan, type Session,
+  activeSession, burnBreakdown, createPlan, createPlanFromTemplate, listPlans, loadCustomExercises, startSession,
+  type Burn, type Plan, type Session,
 } from '../../db/training';
+import { SPORTS, sportKcal, stepBaseline, type Intensity } from '../../lib/activity';
+import { todayKey } from '../../lib/dates';
 import { ensureTimerPermission } from '../../lib/restTimer';
 import { colors, radius, space, type } from '../../theme';
 
-type View_ = 'workouts' | 'exercises';
+type View_ = 'workouts' | 'activity' | 'exercises';
 
 const DAY = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -42,12 +46,9 @@ export default function TrainScreen() {
     <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 110 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: space.md }}>
-          <Chip label="My Workouts" selected={view === 'workouts'} onPress={() => setView('workouts')} />
+          <Chip label="Workouts" selected={view === 'workouts'} onPress={() => setView('workouts')} />
+          <Chip label="Steps & games" selected={view === 'activity'} onPress={() => setView('activity')} />
           <Chip label="Exercises" selected={view === 'exercises'} onPress={() => setView('exercises')} />
-          <View style={{ flex: 1 }} />
-          <Pressable onPress={() => router.push('/history')} accessibilityLabel="Workout history" style={{ marginBottom: space.sm }}>
-            <Text style={{ color: colors.steel, fontWeight: '700' }}>History ›</Text>
-          </Pressable>
         </View>
 
         {active && (
@@ -61,6 +62,8 @@ export default function TrainScreen() {
 
         {view === 'workouts' ? (
           <Workouts db={db} plans={plans} onStart={start} reload={load} />
+        ) : view === 'activity' ? (
+          <Activity db={db} />
         ) : (
           <Exercises />
         )}
@@ -90,12 +93,19 @@ function Workouts({ db, plans, onStart, reload }: { db: ReturnType<typeof useSQL
     router.push(`/plan/${id}`);
   };
 
+  const [showTemplates, setShowTemplates] = useState(false);
+
   return (
     <>
-      <SectionLabel>My plans</SectionLabel>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <SectionLabel>My plans</SectionLabel>
+        <Pressable onPress={() => router.push('/history')} accessibilityLabel="Workout history" style={{ marginBottom: space.sm }}>
+          <Text style={{ color: colors.steel, fontWeight: '700' }}>History ›</Text>
+        </Pressable>
+      </View>
       {plans.length === 0 && (
         <Card>
-          <Text style={type.body}>No plans yet. Start from a template below or build your own.</Text>
+          <Text style={type.body}>No plans yet. Pick a starter template or build your own.</Text>
         </Card>
       )}
       {plans.map((p) => (
@@ -109,10 +119,12 @@ function Workouts({ db, plans, onStart, reload }: { db: ReturnType<typeof useSQL
           <Button title="Start" onPress={() => (p.count ? onStart(p.id) : Alert.alert('Empty plan', 'Add exercises first.'))} style={{ marginTop: space.md, height: 42 }} />
         </Card>
       ))}
-      <Button title="New plan" variant="ghost" onPress={newPlan} style={{ marginBottom: space.lg }} />
+      <View style={{ flexDirection: 'row', gap: space.sm, marginBottom: space.lg }}>
+        <Button title="New plan" variant="ghost" onPress={newPlan} style={{ flex: 1 }} />
+        <Button title={showTemplates ? 'Starter templates ▴' : 'Starter templates ▾'} variant={showTemplates ? 'secondary' : 'ghost'} onPress={() => setShowTemplates(!showTemplates)} style={{ flex: 1 }} />
+      </View>
 
-      <SectionLabel>Starter templates</SectionLabel>
-      {STARTER_TEMPLATES.map((t, i) => (
+      {showTemplates && STARTER_TEMPLATES.map((t, i) => (
         <Card key={t.name}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ flex: 1 }}>
@@ -123,6 +135,139 @@ function Workouts({ db, plans, onStart, reload }: { db: ReturnType<typeof useSQL
           </View>
         </Card>
       ))}
+    </>
+  );
+}
+
+function Activity({ db }: { db: ReturnType<typeof useSQLiteContext> }) {
+  const today = todayKey();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [burn, setBurn] = useState<Burn | null>(null);
+  const [stepSrc, setStepSrc] = useState<string | null>(null);
+  const [sync, setSync] = useState<StepSync | null>(null);
+  const [manual, setManual] = useState('');
+  const [games, setGames] = useState<{ id: number; name: string; kcal: number; started_at: string; ended_at: string }[]>([]);
+  const [sport, setSport] = useState(SPORTS[0].id);
+  const [intensity, setIntensity] = useState<Intensity>('medium');
+  const [minutes, setMinutes] = useState('60');
+
+  const load = useCallback(async () => {
+    const [p, b, s, g] = await Promise.all([getProfile(db), burnBreakdown(db, today), getSteps(db, today), sportsOn(db, today)]);
+    setProfile(p);
+    setBurn(b);
+    setStepSrc(s?.source ?? null);
+    setGames(g);
+  }, [db, today]);
+
+  const syncNow = useCallback(async () => {
+    setSync(await syncPhoneSteps(db));
+    load();
+  }, [db, load]);
+  useFocusEffect(useCallback(() => { syncNow(); }, [syncNow]));
+
+  const weight = profile?.weightKg ?? 70;
+  const baseline = stepBaseline(profile?.activity ?? 1.2);
+  const sp = SPORTS.find((x) => x.id === sport)!;
+  const mins = Math.max(0, Number(minutes.replace(',', '.')) || 0);
+  const preview = sportKcal(sp.met[intensity], weight, mins);
+
+  const saveSteps = async () => {
+    const n = Number(manual.replace(/[^0-9]/g, ''));
+    if (!(n >= 0 && n <= 100000)) return Alert.alert('Check the number', 'Enter today’s steps, e.g. 8450');
+    await setManualSteps(db, today, n);
+    setManual('');
+    load();
+  };
+
+  const addGame = async () => {
+    if (mins < 5) return Alert.alert('How long?', 'Enter the minutes you played (5 or more).');
+    await logSport(db, today, sport, intensity, mins, weight);
+    load();
+  };
+
+  const stepNote =
+    sync === 'ok' && stepSrc !== 'manual' ? 'Synced from this iPhone’s step counter.'
+      : sync === 'denied' ? 'Motion & Fitness access is off. Turn it on in iPhone Settings → JimBuddy (or Expo Go), or type your steps.'
+        : stepSrc === 'manual' ? 'Typed in by you.'
+          : Platform.OS === 'ios' ? 'Type the number from your Fitness / Health app.' : 'Type the number from your fitness app (Android can’t read past steps without a dev build).';
+
+  return (
+    <>
+      <Card style={{ backgroundColor: colors.ink, borderColor: colors.ink }}>
+        <Text style={{ color: colors.amber, fontWeight: '800', fontSize: 12 }}>BURNED TODAY</Text>
+        <Text style={{ color: '#fff', fontSize: 30, fontWeight: '800' }}>{burn?.total ?? 0} kcal</Text>
+        <Text style={{ color: colors.steelLight }}>
+          Workouts {burn?.workouts ?? 0} · Games {burn?.sports ?? 0} · Steps {burn?.steps ?? 0}
+        </Text>
+        <Text style={{ color: colors.steelLight, fontSize: 12, marginTop: 4 }}>
+          Journal adds back {profile?.eatBackPct ?? 50}% of this to your calories.
+        </Text>
+      </Card>
+
+      <SectionLabel>Steps</SectionLabel>
+      <Card>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <Text style={{ fontSize: 28, fontWeight: '800', color: colors.ink }}>{(burn?.stepCount ?? 0).toLocaleString('en-IN')}</Text>
+          <Text style={type.small}>≈ {burn?.steps ?? 0} kcal extra</Text>
+        </View>
+        <View style={{ height: 8, backgroundColor: colors.bg, borderRadius: 4, marginVertical: space.sm, overflow: 'hidden' }}>
+          <View style={{ width: `${Math.min(100, ((burn?.stepCount ?? 0) / Math.max(baseline * 1.6, 1)) * 100)}%`, height: 8, backgroundColor: colors.amber }} />
+        </View>
+        <Text style={type.small}>
+          {stepNote} Your first {baseline.toLocaleString('en-IN')} steps are already inside your calorie target, so only steps above that count.
+        </Text>
+        <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md }}>
+          <TextInput value={manual} onChangeText={setManual} keyboardType="number-pad" placeholder="Today’s steps" placeholderTextColor={colors.muted} style={[ui.input, { flex: 1 }]} accessibilityLabel="Today's steps" />
+          <Button title="Save" onPress={saveSteps} style={{ width: 80 }} />
+        </View>
+        {Platform.OS === 'ios' && (
+          <View style={{ flexDirection: 'row', marginTop: space.sm }}>
+            <Chip label="Sync from iPhone" onPress={async () => { await clearManualSteps(db, today); syncNow(); }} />
+          </View>
+        )}
+      </Card>
+
+      <SectionLabel>Games</SectionLabel>
+      <Card>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+          {SPORTS.map((s) => <Chip key={s.id} label={`${s.emoji} ${s.name}`} selected={sport === s.id} onPress={() => setSport(s.id)} />)}
+        </View>
+        <Text style={[type.label, { marginTop: space.sm, marginBottom: 6 }]}>INTENSITY</Text>
+        <View style={{ flexDirection: 'row', gap: space.sm }}>
+          {(['medium', 'high'] as Intensity[]).map((i) => (
+            <Pressable key={i} onPress={() => setIntensity(i)} style={{ flex: 1, padding: space.md, borderRadius: radius.md, borderWidth: 2, borderColor: intensity === i ? colors.ink : colors.line, backgroundColor: intensity === i ? colors.amberSoft : colors.card }}>
+              <Text style={{ fontWeight: '800', color: colors.ink }}>{i === 'high' ? 'High' : 'Medium'}</Text>
+              <Text style={type.small}>{sp.hint[i]}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={[type.label, { marginTop: space.md, marginBottom: 6 }]}>TIME (MINUTES)</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+          <TextInput value={minutes} onChangeText={setMinutes} keyboardType="number-pad" style={[ui.input, { width: 90, textAlign: 'center', fontWeight: '700' }]} accessibilityLabel="Minutes played" />
+          {[30, 60, 90].map((m) => <Chip key={m} label={`${m}`} selected={mins === m} onPress={() => setMinutes(String(m))} />)}
+        </View>
+        <Button title={`Add ${sp.name} · ≈ ${preview} kcal`} onPress={addGame} style={{ marginTop: space.md }} />
+        <Text style={[type.small, { marginTop: space.sm }]}>Estimate = MET × your weight ({weight} kg) × time, minus resting burn.</Text>
+      </Card>
+
+      {games.length > 0 && (
+        <>
+          <SectionLabel>Logged today</SectionLabel>
+          <Card>
+            {games.map((g) => (
+              <View key={g.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[type.body, { fontWeight: '600' }]}>{g.name}</Text>
+                  <Text style={type.small}>{Math.round((Date.parse(g.ended_at) - Date.parse(g.started_at)) / 60000)} min · {g.kcal} kcal</Text>
+                </View>
+                <Pressable accessibilityLabel={`Remove ${g.name}`} onPress={async () => { await deleteSport(db, g.id); load(); }} hitSlop={8}>
+                  <Text style={{ color: colors.danger, fontWeight: '800', fontSize: 18 }}>×</Text>
+                </Pressable>
+              </View>
+            ))}
+          </Card>
+        </>
+      )}
     </>
   );
 }

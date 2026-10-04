@@ -8,6 +8,7 @@ import {
   SLOT_LABEL, SLOT_SHARE, SLOTS, copyMeal, deleteMealItem, getProfile, mealItemsForDay, pendingScans,
   type MealItem, type Profile, type QueuedScan, type Slot,
 } from '../../db/queries';
+import { syncPhoneSteps } from '../../db/activity';
 import { burnedOn } from '../../db/training';
 import { addDays, dayLabel, todayKey } from '../../lib/dates';
 import { quantityLabel, sum } from '../../lib/nutrition';
@@ -23,6 +24,7 @@ export default function JournalScreen() {
   const [pending, setPending] = useState<QueuedScan[]>([]);
 
   const load = useCallback(async () => {
+    if (date >= addDays(todayKey(), -6)) await syncPhoneSteps(db, false); // silent: only if already allowed
     const [p, rows, b, q] = await Promise.all([getProfile(db), mealItemsForDay(db, date), burnedOn(db, date), pendingScans(db)]);
     setProfile(p);
     setItems(rows);

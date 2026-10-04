@@ -4,8 +4,9 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { BalanceBeam } from '../../components/BalanceBeam';
 import { Bar, Button, Card, SectionLabel } from '../../components/ui';
-import { loggedDays, proteinFix, type ProteinFix } from '../../db/body';
-import { addFoodToMeal, bodyEntries, getProfile, mealItemsForDay, type Profile } from '../../db/queries';
+import { syncPhoneSteps } from '../../db/activity';
+import { loggedDays } from '../../db/body';
+import { bodyEntries, getProfile, mealItemsForDay, type Profile } from '../../db/queries';
 import { getSetting } from '../../db/settings';
 import { activeSession, burnedOn, listPlans, sessionsSince, startSession, type Plan, type Session } from '../../db/training';
 import { beamTilt, fuelScore, trainingScore, weekProgress, weekStartKey } from '../../lib/balance';
@@ -18,14 +19,6 @@ import { colors, radius, space, type } from '../../theme';
 const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const isoDow = (key: string) => ((fromKey(key).getDay() + 6) % 7) + 1; // Mon = 1 … Sun = 7
 
-function slotForNow(): 'breakfast' | 'lunch' | 'snacks' | 'dinner' {
-  const h = new Date().getHours();
-  if (h >= 4 && h < 11) return 'breakfast';
-  if (h < 16 && h >= 11) return 'lunch';
-  if (h < 19 && h >= 16) return 'snacks';
-  return 'dinner';
-}
-
 interface State {
   profile: Profile | null;
   totals: Nutrients;
@@ -35,7 +28,6 @@ interface State {
   todayPlans: (Plan & { count: number })[];
   active: Session | null;
   logged: Set<string>;
-  fix: ProteinFix | null;
   weightAvg: number | null;
   weightRate: number | null;
   backupDue: boolean;
@@ -48,6 +40,7 @@ export default function HomeScreen() {
   const monday = weekStartKey(fromKey(today));
 
   const load = useCallback(async () => {
+    await syncPhoneSteps(db, false);
     const [profile, items, burned, week, plans, active, logged, body, lastBackup, firstMeal] = await Promise.all([
       getProfile(db), mealItemsForDay(db, today), burnedOn(db, today), sessionsSince(db, monday), listPlans(db),
       activeSession(db), loggedDays(db, monday, addDays(monday, 6)), bodyEntries(db, 30), getSetting(db, 'last_backup_at'),
@@ -57,15 +50,12 @@ export default function HomeScreen() {
     const days = new Set<number>();
     plans.forEach((p) => p.days.split(',').filter(Boolean).forEach((d) => days.add(Number(d))));
     const dow = String(isoDow(today));
-    const left = profile ? caloriesLeft(profile.kcal, totals.kcal, burned, profile.eatBackPct) : 0;
-    const proteinLeft = Math.max(0, (profile?.proteinG ?? 0) - totals.protein);
     const smooth = movingAverage(body.filter((b) => b.weight_kg != null).map((b) => ({ date: b.local_date, value: b.weight_kg! })), 7);
     const weekAgo = addDays(today, -7);
     setS({
       profile, totals, burned, week, active, logged,
       planned: days.size || 3,
       todayPlans: plans.filter((p) => p.days.split(',').includes(dow)),
-      fix: profile ? await proteinFix(db, proteinLeft, left) : null,
       weightAvg: smooth.length ? smooth[smooth.length - 1].value : null,
       weightRate: weeklyRate(smooth),
       backupDue: lastBackup ? lastBackup.slice(0, 10) < weekAgo : !!firstMeal?.d && firstMeal.d <= weekAgo,
@@ -100,13 +90,6 @@ export default function HomeScreen() {
     router.push(`/workout/${id}`);
   };
 
-  const addFix = async () => {
-    if (!s.fix) return;
-    const f = s.fix.food;
-    await addFoodToMeal(db, today, slotForNow(), f, s.fix.qty, !!(f.unit && f.unit_grams));
-    load();
-  };
-
   const hour = new Date().getHours();
   const hello = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
@@ -124,21 +107,12 @@ export default function HomeScreen() {
       <Card>
         <Pressable onPress={() => router.push('/journal')} style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: space.sm }}>
           <Text style={{ fontSize: 28, fontWeight: '800', color: kcalLeft >= 0 ? colors.ink : colors.danger }}>{Math.abs(Math.round(kcalLeft))}</Text>
-          <Text style={[type.small, { marginLeft: 6 }]}>{kcalLeft >= 0 ? 'kcal left' : 'kcal over'}{s.burned ? ` · includes ${Math.round((s.burned * (profile?.eatBackPct ?? 50)) / 100)} from training` : ''}</Text>
+          <Text style={[type.small, { marginLeft: 6 }]}>{kcalLeft >= 0 ? 'kcal left' : 'kcal over'}{s.burned ? ` · includes ${Math.round((s.burned * (profile?.eatBackPct ?? 50)) / 100)} from activity` : ''}</Text>
         </Pressable>
         <Bar label="Protein" value={totals.protein} target={proteinTarget} />
-        {s.fix ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.amberSoft, borderRadius: radius.md, padding: space.md, marginTop: space.xs }}>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.label, { color: colors.ink }]}>PROTEIN FIX</Text>
-              <Text style={[type.body, { fontWeight: '600' }]}>{s.fix.label} {s.fix.food.name.toLowerCase().includes(s.fix.food.unit ?? '§') ? '' : `· ${s.fix.food.name}`}</Text>
-              <Text style={type.small}>+{s.fix.protein} g protein · {s.fix.kcal} kcal</Text>
-            </View>
-            <Button title="Add" variant="secondary" onPress={addFix} style={{ width: 72 }} />
-          </View>
-        ) : proteinLeft === 0 && proteinTarget > 0 ? (
-          <Text style={type.small}>Protein target hit. Nice.</Text>
-        ) : null}
+        <Text style={[type.small, { marginTop: space.xs }]}>
+          {proteinLeft > 0 ? `${proteinLeft} g protein to go today.` : proteinTarget > 0 ? 'Protein target hit. Nice.' : ''}
+        </Text>
       </Card>
 
       <SectionLabel>Training today</SectionLabel>
@@ -150,7 +124,7 @@ export default function HomeScreen() {
           </>
         ) : trainedToday ? (
           <Text style={type.body}>
-            Done for today: {s.week.filter((w) => w.local_date === today).map((w) => w.name).join(', ')}{s.burned > 0 ? ` · ~${s.burned} kcal` : ''}. Recover well.
+            Done for today: {s.week.filter((w) => w.local_date === today).map((w) => w.name).join(', ')}. Recover well.{s.burned > 0 ? `\n~${s.burned} kcal burned today (workouts, games, steps).` : ''}
           </Text>
         ) : s.todayPlans.length ? (
           s.todayPlans.map((p) => (

@@ -32,7 +32,27 @@ React Native + Expo (SDK 57), Expo Router, local-first SQLite. Plan: see the "Ji
 Deliberately deferred to v2: Apple Health / Health Connect sync (needs a dev build + paid Apple account), 3D/looping
 exercise animations, cloud sync between phones.
 
-## AI meal scan: deploy the proxy (once, ~10 min)
+## v1.1 changes
+
+- **All data is local.** Profile, food log, workouts, steps and photos live in the phone's SQLite database. There is no
+  account or cloud server.
+- **Train → Steps & games**:
+  - **Steps:** synced from the iPhone's step counter (last 7 days), or typed in by hand. A number you type wins over the
+    synced count. Only steps above your activity baseline (5,000 / 7,500 / 10,000) count, so walking isn't counted twice.
+  - **Games:** Cricket, Badminton, Football, Basketball and Table tennis. Pick Medium or High intensity and the minutes
+    played. Calories = (MET − 1) × weight × hours.
+  - Both feed Journal → Burned.
+- **Starter templates** sit behind a button on Train → Workouts.
+- **Editable targets.** Tap the kcal/protein pill on Profile and type your own numbers. Carbs, fat and fiber follow.
+  "Use suggested" restores the calculated values.
+- **Scan meal → ChatGPT app** (no API key):
+  1. JimBuddy copies a standard prompt and sends the photo to the ChatGPT app through the share sheet. Describe-it opens
+     ChatGPT with the prompt already typed in.
+  2. Copy ChatGPT's table, then tap "Paste ChatGPT's answer". You can adjust grams before saving.
+  - The Cloudflare proxy is now optional (Settings → Advanced).
+- The Home "protein fix" suggestion has been removed.
+
+## Optional: in-app scan via your own proxy
 
 The OpenAI key must never ship inside the app, so a tiny Cloudflare Worker sits in between. See `proxy/README.md` for details.
 

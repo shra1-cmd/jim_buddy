@@ -8,13 +8,13 @@ import { MiniLine } from '../../components/MiniLine';
 import { Button, Card, Chip, SectionLabel, styles as ui } from '../../components/ui';
 import { exerciseById, MUSCLE_LABEL } from '../../data/exercises';
 import { listPhotos, measurementEntries, topLifts } from '../../db/body';
-import { bodyEntries, getProfile, saveWeight, type BodyEntry, type Profile } from '../../db/queries';
+import { bodyEntries, getProfile, saveWeight, setTargets, type BodyEntry, type Profile } from '../../db/queries';
 import { doneSetsSince, exerciseHistory } from '../../db/training';
 import { weekStartKey } from '../../lib/balance';
 import { bestE1rm, setsPerMuscle } from '../../lib/training';
 import { todayKey } from '../../lib/dates';
 import { movingAverage, weeklyRate, type Point } from '../../lib/progress';
-import { GOALS } from '../../lib/targets';
+import { GOALS, computeTargets, customTargets } from '../../lib/targets';
 import { colors, radius, space, type } from '../../theme';
 
 export default function ProfileScreen() {
@@ -27,6 +27,33 @@ export default function ProfileScreen() {
   const [lifts, setLifts] = useState<{ id: string; name: string; points: Point[] }[]>([]);
   const [muscles, setMuscles] = useState<Record<string, number>>({});
   const [side, setSide] = useState<'front' | 'back'>('front');
+  const [editing, setEditing] = useState(false);
+  const [kcalText, setKcalText] = useState('');
+  const [proteinText, setProteinText] = useState('');
+
+  const openEditor = () => {
+    if (!profile) return router.push('/onboarding');
+    setKcalText(String(profile.kcal));
+    setProteinText(String(profile.proteinG));
+    setEditing(true);
+  };
+
+  const saveTargets = async () => {
+    const k = Number(kcalText.replace(/[^0-9.]/g, ''));
+    const pr = Number(proteinText.replace(/[^0-9.]/g, ''));
+    if (!(k >= 1000 && k <= 6000)) return Alert.alert('Check calories', 'Enter a daily number between 1000 and 6000, e.g. 1950.');
+    if (!(pr >= 30 && pr <= 400) || pr * 4 > k * 0.6) return Alert.alert('Check protein', 'Enter grams per day, e.g. 140 (at most 60% of your calories).');
+    await setTargets(db, customTargets(k, pr));
+    setEditing(false);
+    load();
+  };
+
+  const resetTargets = async () => {
+    if (!profile) return;
+    await setTargets(db, computeTargets(profile));
+    setEditing(false);
+    load();
+  };
 
   const load = useCallback(async () => {
     const [p, e, m, ph, top, weekSets] = await Promise.all([
@@ -94,13 +121,39 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
           <Text style={type.small}>{goalLabel}</Text>
-          <Pressable onPress={() => router.push('/onboarding')} style={{ marginTop: 6, alignSelf: 'flex-start', backgroundColor: colors.amberSoft, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 }}>
+          <Pressable onPress={openEditor} accessibilityLabel="Edit daily targets" style={{ marginTop: 6, alignSelf: 'flex-start', backgroundColor: colors.amberSoft, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 }}>
             <Text style={{ fontWeight: '700', color: colors.ink, fontSize: 13 }}>
-              {profile ? `${profile.kcal} kcal · ${profile.proteinG} g protein  ›` : 'Set targets ›'}
+              {profile ? `${profile.kcal} kcal · ${profile.proteinG} g protein  ✎` : 'Set targets ›'}
             </Text>
           </Pressable>
         </View>
       </View>
+
+      {editing && profile && (
+        <Card style={{ borderColor: colors.amber, borderWidth: 2 }}>
+          <Text style={[type.h2, { marginBottom: space.md }]}>Daily targets</Text>
+          <View style={{ flexDirection: 'row', gap: space.md }}>
+            <View style={{ flex: 1 }}>
+              <Text style={[type.label, { marginBottom: 4 }]}>CALORIES (KCAL)</Text>
+              <TextInput value={kcalText} onChangeText={setKcalText} keyboardType="number-pad" autoFocus selectTextOnFocus style={[ui.input, { fontSize: 20, fontWeight: '800' }]} accessibilityLabel="Daily calories" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[type.label, { marginBottom: 4 }]}>PROTEIN (G)</Text>
+              <TextInput value={proteinText} onChangeText={setProteinText} keyboardType="number-pad" selectTextOnFocus style={[ui.input, { fontSize: 20, fontWeight: '800' }]} accessibilityLabel="Daily protein in grams" />
+            </View>
+          </View>
+          <Text style={[type.small, { marginVertical: space.sm }]}>
+            Carbs, fat and fiber follow from these (fat 25% of calories, carbs the rest). Suggested for you: {computeTargets(profile).kcal} kcal · {computeTargets(profile).proteinG} g.
+          </Text>
+          <View style={{ flexDirection: 'row', gap: space.sm }}>
+            <Button title="Save" onPress={saveTargets} style={{ flex: 1 }} />
+            <Button title="Use suggested" variant="ghost" onPress={resetTargets} style={{ flex: 1 }} />
+          </View>
+          <Pressable onPress={() => setEditing(false)} style={{ alignSelf: 'center', marginTop: space.sm }}>
+            <Text style={{ color: colors.steel, fontWeight: '600' }}>Cancel</Text>
+          </Pressable>
+        </Card>
+      )}
 
       <SectionLabel>Body weight</SectionLabel>
       <Card>

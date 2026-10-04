@@ -1,6 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { deleteImage } from '../lib/images';
-import type { Food } from './queries';
 
 const now = () => new Date().toISOString();
 
@@ -67,60 +66,6 @@ export async function loggedDays(db: SQLiteDatabase, from: string, to: string): 
     'SELECT DISTINCT local_date AS d FROM meal_item WHERE local_date BETWEEN ? AND ?', from, to,
   );
   return new Set(rows.map((r) => r.d));
-}
-
-export interface ProteinFix {
-  food: Food;
-  qty: number; // in food.unit when it has one, else grams
-  label: string;
-  protein: number;
-  kcal: number;
-}
-
-// Protein-dense fallbacks from the basic list when the user has no history yet.
-const FALLBACK_IDS = ['basic_egg_boiled', 'basic_egg_white', 'basic_paneer', 'basic_chicken_breast', 'basic_whey', 'basic_soya_chunks'];
-
-/**
- * One concrete protein suggestion: a lean food the user already eats (protein ≥ 8 g per 100 kcal),
- * sized to close most of the gap without blowing the calorie budget.
- */
-export async function proteinFix(db: SQLiteDatabase, proteinLeft: number, kcalLeft: number): Promise<ProteinFix | null> {
-  if (proteinLeft < 8) return null;
-  let foods = await db.getAllAsync<Food & { n: number }>(
-    `SELECT f.*, COUNT(*) AS n FROM meal_item m JOIN food f ON f.id = m.food_id
-     WHERE m.local_date >= date('now', '-45 days') AND f.kcal > 0 AND f.protein * 100.0 / f.kcal >= 8
-     GROUP BY f.id ORDER BY n DESC LIMIT 6`,
-  );
-  if (!foods.length) {
-    foods = await db.getAllAsync<Food & { n: number }>(
-      `SELECT *, 0 AS n FROM food WHERE id IN (${FALLBACK_IDS.map(() => '?').join(',')}) OR (source = 'basic' AND kcal > 0 AND protein * 100.0 / kcal >= 12)`,
-      ...FALLBACK_IDS,
-    );
-    foods.sort((a, b) => b.protein / b.kcal - a.protein / a.kcal);
-  }
-  const budget = Math.max(150, kcalLeft);
-  const want = Math.min(proteinLeft, 35); // one sitting
-  let best: ProteinFix | null = null;
-  for (const f of foods) {
-    let grams: number;
-    let qty: number;
-    let label: string;
-    if (f.unit && f.unit_grams) {
-      // cap at 3 units so it stays a realistic serving (not "11 egg whites")
-      qty = Math.min(3, Math.max(1, Math.round((want / f.protein) * 100 / f.unit_grams)));
-      grams = qty * f.unit_grams;
-      label = `${qty} ${f.unit}${qty > 1 && !f.unit.endsWith('s') && !f.unit.includes('(') ? 's' : ''}`;
-    } else {
-      grams = Math.min(250, Math.max(50, Math.round((want / f.protein) * 10) * 10));
-      qty = grams;
-      label = `${grams} g`;
-    }
-    const kcal = Math.round((f.kcal * grams) / 100);
-    const protein = Math.round((f.protein * grams) / 100);
-    if (kcal > budget || protein < 6) continue;
-    if (!best || protein > best.protein) best = { food: f, qty, label, protein, kcal };
-  }
-  return best;
 }
 
 /** The exercises logged most often (weight × reps only), for the Strength card. */

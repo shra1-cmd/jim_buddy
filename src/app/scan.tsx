@@ -1,17 +1,20 @@
+import * as Clipboard from 'expo-clipboard';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Button, Card, Chip, SectionLabel, styles as ui } from '../components/ui';
 import {
-  SLOT_LABEL, addAiItem, addFoodToMeal, candidatesFor, createCustomFood, deleteQueuedScan, getFood, getQueuedScan, queueScan,
+  SLOT_LABEL, addAiItem, addEstimate, addFoodToMeal, candidatesFor, createCustomFood, deleteQueuedScan, getFood, getQueuedScan, queueScan,
   type Food, type Slot,
 } from '../db/queries';
 import { getSetting } from '../db/settings';
+import { chatGptPrompt, parseChatGptReply, scaleItem, type EstimatedItem } from '../lib/activity';
 import { ProxyError, describePlate, scanLabel, scanPlate, type LabelResult, type PlateResult } from '../lib/ai';
 import { todayKey } from '../lib/dates';
 import { OIL_GRAMS } from '../lib/grounding';
-import { deleteImage, keepImage, pickPhoto, readBase64, type Picked } from '../lib/images';
+import { PermissionError, deleteImage, keepImage, pickPhoto, readBase64, type Picked } from '../lib/images';
 import { forGrams, sum } from '../lib/nutrition';
 import { colors, radius, space, type } from '../theme';
 
@@ -36,10 +39,15 @@ export default function Scan() {
   const [question, setQuestion] = useState<string | null>(null);
   const [label, setLabel] = useState<LabelResult | null>(null);
   const [oilFood, setOilFood] = useState<Food | null>(null);
+  const [proxyUrl, setProxyUrl] = useState<string | null>(null);
+  const [asked, setAsked] = useState(false); // prompt sent to ChatGPT, waiting for the answer
+  const [reply, setReply] = useState('');
+  const [estimates, setEstimates] = useState<(EstimatedItem & { key: string; base: EstimatedItem })[] | null>(null);
   const queueId = p.queueId ? Number(p.queueId) : null;
 
   useEffect(() => {
     getFood(db, 'basic_oil').then(setOilFood);
+    getSetting(db, 'proxy_url').then((u) => setProxyUrl(u?.trim() || null));
   }, [db]);
 
   // Opened from the pending-scan card: restore the queued input and analyse it now.
@@ -62,8 +70,62 @@ export default function Scan() {
       const ph = await pickPhoto(src);
       if (ph) setPhoto(ph);
     } catch (e) {
-      Alert.alert('Camera unavailable', String((e as Error).message ?? e));
+      if (e instanceof PermissionError) {
+        Alert.alert('Permission needed', e.message, [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]);
+      } else {
+        Alert.alert('Camera unavailable', `${(e as Error).message ?? e}\nTry Gallery, or Describe it instead.`);
+      }
     }
+  };
+
+  // ---------- ChatGPT hand-off (default; no API key or server needed) ----------
+  const askChatGpt = async () => {
+    const prompt = chatGptPrompt(mode, { slot: SLOT_LABEL[slot].toLowerCase(), place: mode === 'photo' ? place : undefined, hint, text });
+    try {
+      await Clipboard.setStringAsync(prompt);
+    } catch {
+      // clipboard unavailable (web without permission) – the prompt is also shown on screen
+    }
+    setAsked(true);
+    if (mode === 'text') {
+      // Opens the ChatGPT app (or chatgpt.com) with the prompt typed in.
+      await Linking.openURL(`https://chatgpt.com/?q=${encodeURIComponent(prompt)}`).catch(() => {});
+      return;
+    }
+    if (!photo) return;
+    if (Platform.OS === 'web' || !(await Sharing.isAvailableAsync())) {
+      Alert.alert('Prompt copied', 'Open ChatGPT, attach this photo, paste the prompt and send.');
+      return;
+    }
+    Alert.alert(
+      'Prompt copied ✓',
+      'In the share sheet pick ChatGPT. Then long-press the message box → Paste, and send. Copy ChatGPT’s table and come back here.',
+      [{ text: 'Open share sheet', onPress: () => Sharing.shareAsync(photo.uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Send to ChatGPT' }).catch(() => {}) }],
+    );
+  };
+
+  const readReply = async (fromClipboard: boolean) => {
+    let txt = reply;
+    if (fromClipboard) {
+      txt = (await Clipboard.getStringAsync().catch(() => '')) || '';
+      setReply(txt);
+    }
+    const items = parseChatGptReply(txt);
+    if (!items.length) {
+      Alert.alert('Couldn’t read that', 'Copy the whole table ChatGPT sent (lines like “Chapati | 80 | 240 | 7 | 40 | 6 | 4”) and try again.');
+      return;
+    }
+    setEstimates(items.map((it, i) => ({ ...it, key: `${i}`, base: it })));
+  };
+
+  const saveEstimates = async () => {
+    if (!estimates) return;
+    for (const e of estimates) if (e.grams > 0) await addEstimate(db, date, slot, e);
+    await finishQueue();
+    router.back();
   };
 
   const analyse = async () => {
@@ -143,6 +205,50 @@ export default function Scan() {
     Alert.alert('Saved', `${name} is now in your foods, and one ${l.serving_grams ? 'serving' : '100 g'} is in ${SLOT_LABEL[slot]}. Edit the portion from Journal if needed.`);
     router.back();
   };
+
+  if (estimates) {
+    const tot = sum(estimates.map((e) => ({ kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat, fiber: e.fiber })));
+    return (
+      <View style={{ flex: 1 }}>
+        <Stack.Screen options={{ title: 'Check the items' }} />
+        <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+          <Text style={[type.small, { marginBottom: space.md }]}>ChatGPT’s estimate. Change grams if a portion looks off (macros scale with it), or remove a line.</Text>
+          {estimates.map((e) => (
+            <Card key={e.key}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[type.h2, { flex: 1 }]} numberOfLines={2}>{e.name}</Text>
+                <Pressable onPress={() => setEstimates((xs) => xs!.filter((x) => x.key !== e.key))} accessibilityLabel={`Remove ${e.name}`} hitSlop={8}>
+                  <Text style={{ color: colors.danger, fontWeight: '800', fontSize: 18 }}>×</Text>
+                </Pressable>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm }}>
+                <TextInput
+                  value={String(e.grams)}
+                  keyboardType="number-pad"
+                  onChangeText={(t) => {
+                    const g = Number(t.replace(/[^0-9]/g, '')) || 0;
+                    setEstimates((xs) => xs!.map((x) => (x.key === e.key ? { ...scaleItem(x.base, g), key: x.key, base: x.base } : x)));
+                  }}
+                  style={[ui.input, { width: 96, flexShrink: 0, textAlign: 'center', fontWeight: '700', fontSize: 18 }]}
+                  accessibilityLabel={`${e.name} grams`}
+                />
+                <Text style={type.body}>grams</Text>
+              </View>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: space.sm }}>
+                {[0.5, 0.75, 1, 1.5, 2].map((f) => (
+                  <Chip key={f} label={`${f}×`} selected={e.grams === Math.round(e.base.grams * f)} onPress={() => setEstimates((xs) => xs!.map((x) => (x.key === e.key ? { ...scaleItem(x.base, Math.round(x.base.grams * f)), key: x.key, base: x.base } : x)))} />
+                ))}
+              </View>
+              <Text style={[type.small, { marginTop: 4 }]}>{e.kcal} kcal · P {e.protein} g · C {e.carbs} g · F {e.fat} g · fiber {e.fiber} g</Text>
+            </Card>
+          ))}
+        </ScrollView>
+        <View style={{ position: 'absolute', left: space.lg, right: space.lg, bottom: space.lg }}>
+          <Button title={`Add to ${SLOT_LABEL[slot]} · ${Math.round(tot.kcal)} kcal · ${Math.round(tot.protein)} g protein`} onPress={saveEstimates} disabled={!estimates.length} />
+        </View>
+      </View>
+    );
+  }
 
   if (label) return <LabelConfirm l={label} onSave={saveLabel} />;
 
@@ -224,11 +330,34 @@ export default function Scan() {
           </>
         )}
 
-        <Button title={busy ? 'Analysing…' : 'Analyse'} onPress={analyse} disabled={!canAnalyse || busy} style={{ marginTop: space.md }} />
-        {busy && <ActivityIndicator style={{ marginTop: space.md }} color={colors.ink} />}
-        <Text style={[type.small, { marginTop: space.md, textAlign: 'center' }]}>
-          Photos are resized on the phone and never stored by the scan service.
+        <Button title={asked ? 'Ask ChatGPT again' : 'Ask ChatGPT'} variant={asked ? 'ghost' : 'primary'} onPress={askChatGpt} disabled={!canAnalyse} style={{ marginTop: space.md }} />
+        <Text style={[type.small, { marginTop: space.sm, textAlign: 'center' }]}>
+          {mode === 'text' ? 'Opens ChatGPT with the question filled in.' : 'Copies a ready-made prompt and sends the photo to your ChatGPT app.'} Uses your own ChatGPT account, no API key.
         </Text>
+
+        {asked && (
+          <Card style={{ marginTop: space.md, borderColor: colors.amber, borderWidth: 2 }}>
+            <Text style={type.h2}>2 · Bring back ChatGPT’s answer</Text>
+            <Text style={[type.small, { marginVertical: space.sm }]}>In ChatGPT, tap Copy under its reply, then come back here.</Text>
+            <Button title="Paste ChatGPT’s answer" onPress={() => readReply(true)} />
+            <TextInput
+              value={reply}
+              onChangeText={setReply}
+              multiline
+              placeholder={'…or paste it here:\nChapati | 80 | 240 | 7 | 40 | 6 | 4'}
+              placeholderTextColor={colors.muted}
+              style={[ui.input, { height: 110, paddingTop: 12, textAlignVertical: 'top', marginTop: space.sm }]}
+            />
+            {reply.trim().length > 0 && <Button title="Read answer" variant="secondary" onPress={() => readReply(false)} style={{ marginTop: space.sm }} />}
+          </Card>
+        )}
+
+        {proxyUrl && (
+          <>
+            <Button title={busy ? 'Analysing…' : 'Analyse in app (scan service)'} variant="ghost" onPress={analyse} disabled={!canAnalyse || busy || (mode !== 'text' && !photo?.base64)} style={{ marginTop: space.lg }} />
+            {busy && <ActivityIndicator style={{ marginTop: space.md }} color={colors.ink} />}
+          </>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );

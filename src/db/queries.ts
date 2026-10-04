@@ -79,6 +79,13 @@ export async function saveProfile(db: SQLiteDatabase, p: Profile) {
   );
 }
 
+export async function setTargets(db: SQLiteDatabase, t: Targets) {
+  await db.runAsync(
+    'UPDATE user_profile SET kcal = ?, protein_g = ?, carbs_g = ?, fat_g = ?, fiber_g = ?, updated_at = ? WHERE id = 1',
+    t.kcal, t.proteinG, t.carbsG, t.fatG, t.fiberG, now(),
+  );
+}
+
 export async function setEatBack(db: SQLiteDatabase, pct: number) {
   await db.runAsync('UPDATE user_profile SET eat_back_pct = ?, updated_at = ? WHERE id = 1', pct, now());
 }
@@ -142,6 +149,18 @@ export async function quickAdd(db: SQLiteDatabase, date: string, slot: Slot, nam
     `INSERT INTO meal_item (local_date, slot, food_id, name, qty, unit, grams, kcal, protein, carbs, fat, fiber, source, created_at)
      VALUES (?, ?, NULL, ?, 1, 'serving', 0, ?, ?, ?, ?, ?, 'quick', ?)`,
     date, slot, name || 'Quick add', n.kcal, n.protein, n.carbs, n.fat, n.fiber, now(),
+  );
+}
+
+/** A ChatGPT estimate: stored as its own line with the macros ChatGPT gave (no database food behind it). */
+export async function addEstimate(
+  db: SQLiteDatabase, date: string, slot: Slot,
+  it: { name: string; grams: number; kcal: number; protein: number; carbs: number; fat: number; fiber: number },
+) {
+  await db.runAsync(
+    `INSERT INTO meal_item (local_date, slot, food_id, name, qty, unit, grams, kcal, protein, carbs, fat, fiber, source, created_at)
+     VALUES (?, ?, NULL, ?, ?, 'g', ?, ?, ?, ?, ?, ?, 'chatgpt', ?)`,
+    date, slot, it.name, it.grams, it.grams, it.kcal, it.protein, it.carbs, it.fat, it.fiber, now(),
   );
 }
 

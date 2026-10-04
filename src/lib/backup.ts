@@ -6,7 +6,7 @@ import { Platform } from 'react-native';
 // Everything the user typed. Seed foods (INDB/basic) are rebuilt by the app, so only custom foods are exported.
 const TABLES = [
   'user_profile', 'meal_item', 'body_entry', 'custom_exercise', 'workout_plan', 'plan_exercise',
-  'workout_session', 'set_log', 'progress_photo', 'settings',
+  'workout_session', 'set_log', 'progress_photo', 'settings', 'step_day',
 ] as const;
 
 export interface Backup {

@@ -48,6 +48,12 @@
         {
           "color": "#FFB020"
         }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "JimBuddy reads your step count to add walking calories to your day."
+        }
       ]
     ],
     "scheme": "jimbuddy",

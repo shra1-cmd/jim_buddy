@@ -50,6 +50,15 @@ export function computeTargets(stats: BodyStats): Targets {
   return { kcal, proteinG, carbsG, fatG, fiberG };
 }
 
+/** Your own numbers: keep calories and protein as typed, split the rest 25% fat / remainder carbs. */
+export function customTargets(kcal: number, proteinG: number): Targets {
+  const k = Math.round(kcal);
+  const p = Math.round(proteinG);
+  const fatG = Math.round((k * 0.25) / 9);
+  const carbsG = Math.max(0, Math.round((k - p * 4 - fatG * 9) / 4));
+  return { kcal: k, proteinG: p, carbsG, fatG, fiberG: Math.round((k / 1000) * 14) };
+}
+
 /** Calories left on the ring: target − eaten + burned × eat-back share. */
 export function caloriesLeft(target: number, eaten: number, burned: number, eatBackPct: number): number {
   return Math.round(target - eaten + burned * (eatBackPct / 100));
