@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Image, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Image, View } from 'react-native';
+import { Text } from './AppText';
 import { EXERCISE_MEDIA } from '../data/exerciseMedia';
 import { colors, radius, type } from '../theme';
 

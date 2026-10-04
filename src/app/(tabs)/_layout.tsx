@@ -1,27 +1,24 @@
 import { Tabs } from 'expo-router/js-tabs';
-import { HomeIcon, JournalIcon, ProfileIcon, TrainIcon } from '../../components/TabIcons';
-import { colors } from '../../theme';
+import { ClayTabBar } from '../../components/ClayTabBar';
+import { colors, fonts } from '../../theme';
 
 export default function TabsLayout() {
   return (
     <Tabs
-      initialRouteName="journal"
+      initialRouteName="home"
+      tabBar={(props) => <ClayTabBar {...props} />}
       screenOptions={{
         headerShadowVisible: false,
-        headerStyle: { backgroundColor: colors.bg },
-        headerTitleStyle: { fontWeight: '800', fontSize: 22, color: colors.ink },
+        headerStyle: { backgroundColor: colors.bg, height: 104 },
+        headerTitleStyle: { fontFamily: fonts.black, fontSize: 30, color: colors.ink },
         headerTitleAlign: 'left',
-        tabBarActiveTintColor: colors.ink,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.line },
-        tabBarLabelStyle: { fontWeight: '600' },
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
-      <Tabs.Screen name="home" options={{ title: 'Home', tabBarIcon: ({ color }) => <HomeIcon color={String(color)} /> }} />
-      <Tabs.Screen name="journal" options={{ title: 'Journal', tabBarIcon: ({ color }) => <JournalIcon color={String(color)} /> }} />
-      <Tabs.Screen name="train" options={{ title: 'Train', tabBarIcon: ({ color }) => <TrainIcon color={String(color)} /> }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <ProfileIcon color={String(color)} /> }} />
+      <Tabs.Screen name="home" options={{ title: 'Home', headerShown: false }} />
+      <Tabs.Screen name="journal" options={{ title: 'Journal' }} />
+      <Tabs.Screen name="train" options={{ title: 'Train' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
   );
 }

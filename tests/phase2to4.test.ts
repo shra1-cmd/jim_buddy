@@ -1,8 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { bestE1rm, formatDuration, sessionKcal, sessionVolume, setsPerMuscle, suggestLoad } from '../src/lib/training.ts';
-import { matchScore, rankCandidates, tokens } from '../src/lib/grounding.ts';
-import { beamTilt, fuelScore, trainingScore, weekProgress, weekStartKey } from '../src/lib/balance.ts';
+import { currentStreak, fuelScore, trainingScore, weekProgress, weekStartKey } from '../src/lib/balance.ts';
 
 const S = (kg: number | null, reps: number | null, extra: Partial<{ is_warmup: number; done: number }> = {}) => ({
   kg, reps, seconds: null, distance_m: null, is_warmup: 0, done: 1, ...extra,
@@ -42,25 +41,13 @@ test('session kcal is net of resting MET and capped', () => {
   assert.equal(formatDuration(95), '1:35');
 });
 
-test('grounding matches Indian dish names to database rows', () => {
-  assert.deepEqual(tokens('Chapati/Roti'), ['chapati', 'roti']);
-  assert.ok(matchScore('roti', 'Chapati/Roti') > 0.7);
-  assert.ok(matchScore('2 rotis', 'Chapati/Roti') > 0.4);
-  const foods = [
-    { name: 'Vegetable biryani/biriyani', source: 'indb' },
-    { name: 'Mutton biryani/biriyani', source: 'indb' },
-    { name: 'Boiled rice (Uble chawal)', source: 'indb' },
-  ];
-  const ranked = rankCandidates('mutton biryani', foods);
-  assert.equal(ranked[0].name, 'Mutton biryani/biriyani');
-  assert.equal(rankCandidates('pizza', foods).length, 0);
-});
-
-test('balance scores and tilt', () => {
+test('balance scores, week maths and streaks', () => {
   assert.equal(fuelScore(1000, 2000, 120, 120), 0.5);
   assert.equal(trainingScore(2, 0), 2 / 3);
-  assert.equal(beamTilt(0.5, 0.5, 0.5), 4); // on pace with training, half fuel → tips toward training
-  assert.equal(beamTilt(1, 0, 1), -6);
+  assert.equal(currentStreak(['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'], '2026-10-04'), 4);
+  assert.equal(currentStreak(['2026-10-01', '2026-10-02', '2026-10-03'], '2026-10-04'), 3); // today not logged yet
+  assert.equal(currentStreak(['2026-10-01', '2026-10-04'], '2026-10-04'), 1);
+  assert.equal(currentStreak(['2026-09-20'], '2026-10-04'), 0);
   assert.equal(weekProgress(new Date(2026, 9, 5)), 1 / 7); // Monday
   assert.equal(weekStartKey(new Date(2026, 9, 3)), '2026-09-28'); // Saturday → Monday
 });

@@ -1,11 +1,13 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '../../components/AppText';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { BodyMap } from '../../components/BodyMap';
 import { MiniLine } from '../../components/MiniLine';
-import { Button, Card, Chip, SectionLabel, styles as ui } from '../../components/ui';
+import { Mascot } from '../../components/Illustrations';
+import { Button, Card, Chip, RoundButton, SectionLabel, styles as ui } from '../../components/ui';
 import { exerciseById, MUSCLE_LABEL } from '../../data/exercises';
 import { listPhotos, measurementEntries, topLifts } from '../../db/body';
 import { bodyEntries, getProfile, saveWeight, setTargets, type BodyEntry, type Profile } from '../../db/queries';
@@ -15,7 +17,7 @@ import { bestE1rm, setsPerMuscle } from '../../lib/training';
 import { todayKey } from '../../lib/dates';
 import { movingAverage, weeklyRate, type Point } from '../../lib/progress';
 import { GOALS, computeTargets, customTargets } from '../../lib/targets';
-import { colors, radius, space, type } from '../../theme';
+import { clay, colors, radius, space, type } from '../../theme';
 
 export default function ProfileScreen() {
   const db = useSQLiteContext();
@@ -109,20 +111,18 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 48 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: space.lg }}>
-        <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', marginRight: space.md }}>
-          <Text style={{ color: colors.amber, fontSize: 26, fontWeight: '800' }}>{(profile?.name || 'J').slice(0, 1).toUpperCase()}</Text>
+      <View style={{ backgroundColor: colors.mint, borderRadius: radius.lg, padding: space.lg, flexDirection: 'row', alignItems: 'center', boxShadow: clay.tile, marginBottom: space.lg }}>
+        <View style={{ width: 84, height: 84, borderRadius: 42, backgroundColor: '#FDE2D2', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 4, borderColor: colors.cardHi, boxShadow: clay.soft, marginRight: space.md }}>
+          <Mascot face size={76} id="profile" />
         </View>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={type.h2}>{profile?.name || 'You'}</Text>
-            <Pressable onPress={() => router.push('/settings')} accessibilityLabel="Settings" hitSlop={10}>
-              <Text style={{ color: colors.steel, fontWeight: '700' }}>Settings ›</Text>
-            </Pressable>
+            <Text style={{ fontSize: 20, fontWeight: '800', color: '#24493C', flexShrink: 1 }} numberOfLines={1}>Hi, {profile?.name || 'you'}! 👋</Text>
+            <RoundButton icon="gear" label="Settings" color={colors.tealDeep} size={36} onPress={() => router.push('/settings')} />
           </View>
-          <Text style={type.small}>{goalLabel}</Text>
-          <Pressable onPress={openEditor} accessibilityLabel="Edit daily targets" style={{ marginTop: 6, alignSelf: 'flex-start', backgroundColor: colors.amberSoft, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 }}>
-            <Text style={{ fontWeight: '700', color: colors.ink, fontSize: 13 }}>
+          <Text style={{ color: '#3F6E5D', fontSize: 13 }}>{goalLabel}</Text>
+          <Pressable onPress={openEditor} accessibilityLabel="Edit daily targets" style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: colors.card, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 6, boxShadow: clay.soft }}>
+            <Text style={{ fontWeight: '700', fontSize: 13 }}>
               {profile ? `${profile.kcal} kcal · ${profile.proteinG} g protein  ✎` : 'Set targets ›'}
             </Text>
           </Pressable>
@@ -130,7 +130,7 @@ export default function ProfileScreen() {
       </View>
 
       {editing && profile && (
-        <Card style={{ borderColor: colors.amber, borderWidth: 2 }}>
+        <Card style={{ borderColor: colors.coral, borderWidth: 2 }}>
           <Text style={[type.h2, { marginBottom: space.md }]}>Daily targets</Text>
           <View style={{ flexDirection: 'row', gap: space.md }}>
             <View style={{ flex: 1 }}>
@@ -223,7 +223,7 @@ export default function ProfileScreen() {
         ) : (
           <Text style={type.small}>
             {Object.entries(muscles).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${MUSCLE_LABEL[k] ?? k} ${v}`).join(' · ')}
-            {'\n'}Hard sets since Monday (secondary muscles count half). Dark amber = 10+, a good weekly dose for growth.
+            {'\n'}Hard sets since Monday (secondary muscles count half). Solid coral = 10+, a good weekly dose for growth.
           </Text>
         )}
       </Card>

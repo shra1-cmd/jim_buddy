@@ -1,4 +1,5 @@
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from './AppText';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { colors, type } from '../theme';
 

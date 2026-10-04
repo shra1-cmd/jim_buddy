@@ -3,7 +3,8 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '../../components/AppText';
 import { Button, Card, styles as ui } from '../../components/ui';
 import { exerciseById } from '../../data/exercises';
 import { getProfile } from '../../db/queries';
@@ -13,7 +14,7 @@ import {
 } from '../../db/training';
 import { cancelRestEnd, scheduleRestEnd } from '../../lib/restTimer';
 import { bestE1rm, formatDuration, sessionVolume, suggestLoad } from '../../lib/training';
-import { colors, radius, space, type } from '../../theme';
+import { clay, colors, radius, space, type } from '../../theme';
 
 type Draft = { a: string; b: string }; // first and second input of a set row, as typed
 
@@ -201,7 +202,7 @@ export default function WorkoutScreen() {
                       accessibilityLabel={s.is_warmup ? 'Warm-up set, tap to make working' : `Set ${s.set_no}, tap to mark warm-up`}
                       style={{ width: 44 }}
                     >
-                      <Text style={{ fontWeight: '800', color: s.is_warmup ? colors.amber : colors.ink }}>{s.is_warmup ? 'W' : s.set_no}</Text>
+                      <Text style={{ fontWeight: '800', color: s.is_warmup ? colors.gold : colors.ink }}>{s.is_warmup ? 'W' : s.set_no}</Text>
                     </Pressable>
                     <SetInput editable={active} value={d.a} onChange={(v) => setDrafts((x) => ({ ...x, [s.id]: { ...d, a: v } }))} onBlur={() => persist(s)} />
                     {hb ? <SetInput editable={active} value={d.b} onChange={(v) => setDrafts((x) => ({ ...x, [s.id]: { ...d, b: v } }))} onBlur={() => persist(s)} /> : null}
@@ -236,9 +237,9 @@ export default function WorkoutScreen() {
       </ScrollView>
 
       {active && restEnd && (
-        <View style={{ position: 'absolute', left: space.md, right: space.md, bottom: space.md, backgroundColor: restLeft > 0 ? colors.ink : colors.good, borderRadius: radius.lg, padding: space.md, flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ position: 'absolute', left: space.md, right: space.md, bottom: space.md, backgroundColor: restLeft > 0 ? colors.teal : colors.coral, borderRadius: radius.lg, padding: space.md, flexDirection: 'row', alignItems: 'center', boxShadow: restLeft > 0 ? clay.buttonTeal : clay.button }}>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.amber, fontWeight: '800', fontSize: 12 }}>{restLeft > 0 ? 'REST' : 'GO'}</Text>
+            <Text style={{ color: '#E6F5EF', fontWeight: '800', fontSize: 12 }}>{restLeft > 0 ? 'REST' : 'GO'}</Text>
             <Text style={{ color: '#fff', fontSize: 28, fontWeight: '800' }}>{restLeft > 0 ? formatDuration(restLeft) : 'Next set'}</Text>
           </View>
           <RestBtn label="−15" onPress={() => adjustRest(-15)} />
@@ -310,7 +311,7 @@ function SetInput({ value, onChange, onBlur, editable }: { value: string; onChan
 
 function RestBtn({ label, onPress }: { label: string; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={{ marginLeft: 8, paddingHorizontal: 12, height: 40, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' }}>
+    <Pressable onPress={onPress} style={{ marginLeft: 8, paddingHorizontal: 12, height: 40, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ color: '#fff', fontWeight: '700' }}>{label}</Text>
     </Pressable>
   );

@@ -1,9 +1,10 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '../../components/AppText';
 import { BodyMap } from '../../components/BodyMap';
-import { Button, Card, Chip, SectionLabel, styles as ui } from '../../components/ui';
+import { Button, Card, Chip, IconBadge, SectionLabel, styles as ui } from '../../components/ui';
 import { GROUPS, MUSCLE_LABEL, STARTER_TEMPLATES, allExercises, exercisesForMuscle, type Exercise } from '../../data/exercises';
 import { clearManualSteps, deleteSport, getSteps, logSport, setManualSteps, sportsOn, syncPhoneSteps, type StepSync } from '../../db/activity';
 import { getProfile, type Profile } from '../../db/queries';
@@ -14,7 +15,7 @@ import {
 import { SPORTS, sportKcal, stepBaseline, type Intensity } from '../../lib/activity';
 import { todayKey } from '../../lib/dates';
 import { ensureTimerPermission } from '../../lib/restTimer';
-import { colors, radius, space, type } from '../../theme';
+import { clay, colors, radius, space, tiles, type } from '../../theme';
 
 type View_ = 'workouts' | 'activity' | 'exercises';
 
@@ -53,9 +54,12 @@ export default function TrainScreen() {
 
         {active && (
           <Pressable onPress={() => router.push(`/workout/${active.id}`)}>
-            <Card style={{ backgroundColor: colors.ink, borderColor: colors.ink }}>
-              <Text style={{ color: colors.amber, fontWeight: '800' }}>WORKOUT IN PROGRESS</Text>
-              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 2 }}>{active.name} · tap to resume</Text>
+            <Card style={{ backgroundColor: tiles.coral.bg, flexDirection: 'row', alignItems: 'center' }}>
+              <IconBadge name="play" color={colors.coral} />
+              <View style={{ marginLeft: space.md, flex: 1 }}>
+                <Text style={{ color: colors.coralDeep, fontWeight: '800', fontSize: 12 }}>WORKOUT IN PROGRESS</Text>
+                <Text style={{ color: '#7A3B2E', fontSize: 17, fontWeight: '700', marginTop: 2 }}>{active.name} · tap to resume</Text>
+              </View>
             </Card>
           </Pressable>
         )}
@@ -73,9 +77,9 @@ export default function TrainScreen() {
         <Pressable
           accessibilityRole="button"
           onPress={() => start(null)}
-          style={{ position: 'absolute', right: space.lg, bottom: space.lg, backgroundColor: colors.amber, borderRadius: radius.pill, paddingHorizontal: 20, height: 52, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 }}
+          style={({ pressed }) => ({ position: 'absolute', right: space.lg, bottom: space.lg, backgroundColor: colors.coral, borderRadius: radius.pill, paddingHorizontal: 20, height: 52, alignItems: 'center', justifyContent: 'center', boxShadow: clay.button, transform: [{ scale: pressed ? 0.97 : 1 }] })}
         >
-          <Text style={{ fontWeight: '800', color: colors.ink, fontSize: 15 }}>＋ Empty workout</Text>
+          <Text style={{ fontWeight: '800', color: '#fff', fontSize: 15 }}>＋ Empty workout</Text>
         </Pressable>
       )}
     </View>
@@ -97,12 +101,7 @@ function Workouts({ db, plans, onStart, reload }: { db: ReturnType<typeof useSQL
 
   return (
     <>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <SectionLabel>My plans</SectionLabel>
-        <Pressable onPress={() => router.push('/history')} accessibilityLabel="Workout history" style={{ marginBottom: space.sm }}>
-          <Text style={{ color: colors.steel, fontWeight: '700' }}>History ›</Text>
-        </Pressable>
-      </View>
+      <SectionLabel action="History" onAction={() => router.push('/history')}>My plans</SectionLabel>
       {plans.length === 0 && (
         <Card>
           <Text style={type.body}>No plans yet. Pick a starter template or build your own.</Text>
@@ -110,11 +109,14 @@ function Workouts({ db, plans, onStart, reload }: { db: ReturnType<typeof useSQL
       )}
       {plans.map((p) => (
         <Card key={p.id}>
-          <Pressable onPress={() => router.push(`/plan/${p.id}`)}>
-            <Text style={type.h2}>{p.name}</Text>
-            <Text style={type.small}>
-              {p.count} exercises{p.days ? ` · ${p.days.split(',').map((d) => DAY[Number(d)]).join(' ')}` : ''}  · edit ›
-            </Text>
+          <Pressable onPress={() => router.push(`/plan/${p.id}`)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <IconBadge name="dumbbell" color={tiles.green.badge} />
+            <View style={{ flex: 1, marginLeft: space.md }}>
+              <Text style={type.h2}>{p.name}</Text>
+              <Text style={type.small}>
+                {p.count} exercises{p.days ? ` · ${p.days.split(',').map((d) => DAY[Number(d)]).join(' ')}` : ''}  · edit ›
+              </Text>
+            </View>
           </Pressable>
           <Button title="Start" onPress={() => (p.count ? onStart(p.id) : Alert.alert('Empty plan', 'Add exercises first.'))} style={{ marginTop: space.md, height: 42 }} />
         </Card>
@@ -127,7 +129,8 @@ function Workouts({ db, plans, onStart, reload }: { db: ReturnType<typeof useSQL
       {showTemplates && STARTER_TEMPLATES.map((t, i) => (
         <Card key={t.name}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ flex: 1 }}>
+            <IconBadge name="book" color={[tiles.coral, tiles.yellow, tiles.blue, tiles.pink][i % 4].badge} size={38} />
+            <View style={{ flex: 1, marginLeft: space.md }}>
               <Text style={type.h2}>{t.name}</Text>
               <Text style={type.small}>{t.days}</Text>
             </View>
@@ -193,15 +196,15 @@ function Activity({ db }: { db: ReturnType<typeof useSQLiteContext> }) {
 
   return (
     <>
-      <Card style={{ backgroundColor: colors.ink, borderColor: colors.ink }}>
-        <Text style={{ color: colors.amber, fontWeight: '800', fontSize: 12 }}>BURNED TODAY</Text>
-        <Text style={{ color: '#fff', fontSize: 30, fontWeight: '800' }}>{burn?.total ?? 0} kcal</Text>
-        <Text style={{ color: colors.steelLight }}>
-          Workouts {burn?.workouts ?? 0} · Games {burn?.sports ?? 0} · Steps {burn?.steps ?? 0}
-        </Text>
-        <Text style={{ color: colors.steelLight, fontSize: 12, marginTop: 4 }}>
-          Journal adds back {profile?.eatBackPct ?? 50}% of this to your calories.
-        </Text>
+      <Card style={{ backgroundColor: tiles.yellow.bg, flexDirection: 'row', alignItems: 'center' }}>
+        <IconBadge name="bolt" color={tiles.yellow.badge} size={52} />
+        <View style={{ marginLeft: space.md, flex: 1 }}>
+          <Text style={{ color: '#8A5A12', fontWeight: '800', fontSize: 12 }}>BURNED TODAY</Text>
+          <Text style={{ fontSize: 28, fontWeight: '800' }}>{burn?.total ?? 0} kcal</Text>
+          <Text style={{ color: colors.inkSoft, fontSize: 12 }}>
+            Workouts {burn?.workouts ?? 0} · Games {burn?.sports ?? 0} · Steps {burn?.steps ?? 0} · {profile?.eatBackPct ?? 50}% added to food
+          </Text>
+        </View>
       </Card>
 
       <SectionLabel>Steps</SectionLabel>
@@ -210,8 +213,8 @@ function Activity({ db }: { db: ReturnType<typeof useSQLiteContext> }) {
           <Text style={{ fontSize: 28, fontWeight: '800', color: colors.ink }}>{(burn?.stepCount ?? 0).toLocaleString('en-IN')}</Text>
           <Text style={type.small}>≈ {burn?.steps ?? 0} kcal extra</Text>
         </View>
-        <View style={{ height: 8, backgroundColor: colors.bg, borderRadius: 4, marginVertical: space.sm, overflow: 'hidden' }}>
-          <View style={{ width: `${Math.min(100, ((burn?.stepCount ?? 0) / Math.max(baseline * 1.6, 1)) * 100)}%`, height: 8, backgroundColor: colors.amber }} />
+        <View style={{ height: 10, backgroundColor: '#F6E2CF', borderRadius: 5, marginVertical: space.sm, overflow: 'hidden', boxShadow: clay.well }}>
+          <View style={{ width: `${Math.min(100, ((burn?.stepCount ?? 0) / Math.max(baseline * 1.6, 1)) * 100)}%`, height: 8, backgroundColor: colors.sageDeep, borderRadius: 4 }} />
         </View>
         <Text style={type.small}>
           {stepNote} Your first {baseline.toLocaleString('en-IN')} steps are already inside your calorie target, so only steps above that count.
@@ -235,7 +238,7 @@ function Activity({ db }: { db: ReturnType<typeof useSQLiteContext> }) {
         <Text style={[type.label, { marginTop: space.sm, marginBottom: 6 }]}>INTENSITY</Text>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
           {(['medium', 'high'] as Intensity[]).map((i) => (
-            <Pressable key={i} onPress={() => setIntensity(i)} style={{ flex: 1, padding: space.md, borderRadius: radius.md, borderWidth: 2, borderColor: intensity === i ? colors.ink : colors.line, backgroundColor: intensity === i ? colors.amberSoft : colors.card }}>
+            <Pressable key={i} onPress={() => setIntensity(i)} style={{ flex: 1, padding: space.md, borderRadius: radius.md, backgroundColor: intensity === i ? (i === 'high' ? tiles.coral.bg : tiles.yellow.bg) : colors.cardHi, boxShadow: intensity === i ? clay.tile : clay.well }}>
               <Text style={{ fontWeight: '800', color: colors.ink }}>{i === 'high' ? 'High' : 'Medium'}</Text>
               <Text style={type.small}>{sp.hint[i]}</Text>
             </Pressable>

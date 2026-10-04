@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, StyleSheet } from 'react-native';
+import { Text } from './AppText';
 import { colors } from '../theme';
 
 // Cold-start wordmark reveal: the system splash shows only the mark; here it slides left while "JimBuddy"
@@ -38,13 +39,13 @@ export function IntroReveal() {
 
   if (!visible) return null;
   return (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', opacity: fade }]}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', opacity: fade }]}>
       <Animated.Image
         source={require('../../assets/splash-icon.png')}
         style={{ width: 120, height: 120, transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [0, -70] }) }] }}
       />
       <Animated.View style={{ position: 'absolute', left: '50%', marginLeft: -10, opacity: word, transform: [{ translateX: word.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
-        <Text style={{ color: '#fff', fontSize: 30, fontWeight: '800', letterSpacing: -0.5 }}>JimBuddy</Text>
+        <Text style={{ color: colors.ink, fontSize: 32, fontWeight: '800' }}>JimBuddy</Text>
       </Animated.View>
     </Animated.View>
   );

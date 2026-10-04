@@ -1,7 +1,8 @@
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '../../components/AppText';
 import { Button, Card, Chip, SectionLabel, styles as ui } from '../../components/ui';
 import { exerciseById } from '../../data/exercises';
 import {

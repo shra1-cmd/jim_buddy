@@ -1,7 +1,8 @@
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, View } from 'react-native';
+import { Text } from '../components/AppText';
 import { Button, Card, Chip, SectionLabel } from '../components/ui';
 import { ANGLES, addPhoto, deletePhoto, listPhotos, type Angle, type Photo } from '../db/body';
 import { fromKey, todayKey } from '../lib/dates';

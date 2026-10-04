@@ -14,7 +14,7 @@ type SeedFood = {
   ug: number | null;
 };
 
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 
 /** Runs on app start (SQLiteProvider onInit). Versioned with PRAGMA user_version. */
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
@@ -188,6 +188,24 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       ALTER TABLE workout_session ADD COLUMN kind TEXT NOT NULL DEFAULT 'lift';
     `);
     version = 3;
+  }
+
+  if (version === 3) {
+    // v4: the weekly mess/PG menu (medium portions per dish); the old in-app scan queue is gone.
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS menu_item (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dow INTEGER NOT NULL,
+        slot TEXT NOT NULL,
+        name TEXT NOT NULL,
+        grams REAL NOT NULL,
+        kcal REAL NOT NULL, protein REAL NOT NULL, carbs REAL NOT NULL, fat REAL NOT NULL, fiber REAL NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS menu_item_day_idx ON menu_item(dow, slot);
+      DROP TABLE IF EXISTS scan_queue;
+    `);
+    version = 4;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

@@ -33,7 +33,7 @@ export async function pickPhoto(source: 'camera' | 'library'): Promise<Picked | 
 }
 
 /** Copy an image into the app's documents folder (photos, queued scans) and return its new uri. */
-export async function keepImage(uri: string, folder: 'scans' | 'progress'): Promise<string> {
+export async function keepImage(uri: string, folder: 'menu' | 'progress'): Promise<string> {
   if (Platform.OS === 'web') return uri;
   const dir = new Directory(Paths.document, folder);
   dir.create({ idempotent: true, intermediates: true });

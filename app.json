@@ -13,7 +13,7 @@
     "android": {
       "package": "com.jimbuddy.app",
       "adaptiveIcon": {
-        "backgroundColor": "#131B2E",
+        "backgroundColor": "#FDE2CF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
@@ -31,7 +31,7 @@
         {
           "image": "./assets/splash-icon.png",
           "imageWidth": 180,
-          "backgroundColor": "#131B2E",
+          "backgroundColor": "#FCEBD9",
           "resizeMode": "contain"
         }
       ],
@@ -54,7 +54,8 @@
         {
           "motionPermission": "JimBuddy reads your step count to add walking calories to your day."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "scheme": "jimbuddy",
     "experiments": {

@@ -6,7 +6,7 @@ import { Platform } from 'react-native';
 // Everything the user typed. Seed foods (INDB/basic) are rebuilt by the app, so only custom foods are exported.
 const TABLES = [
   'user_profile', 'meal_item', 'body_entry', 'custom_exercise', 'workout_plan', 'plan_exercise',
-  'workout_session', 'set_log', 'progress_photo', 'settings', 'step_day',
+  'workout_session', 'set_log', 'progress_photo', 'settings', 'step_day', 'menu_item',
 ] as const;
 
 export interface Backup {
@@ -20,8 +20,8 @@ export async function buildBackup(db: SQLiteDatabase): Promise<Backup> {
   const tables: Backup['tables'] = {};
   for (const t of TABLES) tables[t] = await db.getAllAsync(`SELECT * FROM ${t}`);
   tables.food = await db.getAllAsync("SELECT * FROM food WHERE source = 'custom'");
-  // never export the invite token
-  tables.settings = tables.settings.filter((r) => r.key !== 'invite_token');
+  // never export secrets or phone-only file paths
+  tables.settings = tables.settings.filter((r) => !['invite_token', 'proxy_url', 'menu_photo'].includes(String(r.key)));
   return { app: 'jimbuddy', version: 1, exported_at: new Date().toISOString(), tables };
 }
 

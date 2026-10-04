@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '../components/AppText';
 import { Button, Card, Chip, SectionLabel, styles as ui } from '../components/ui';
 import { getProfile, saveProfile, saveWeight } from '../db/queries';
 import { todayKey } from '../lib/dates';
@@ -50,7 +51,7 @@ export default function Onboarding() {
     });
     if (!editing) await saveWeight(db, todayKey(), weightKg);
     if (editing && router.canGoBack()) router.back();
-    else router.replace('/journal');
+    else router.replace('/home');
   };
 
   return (
@@ -96,17 +97,17 @@ export default function Onboarding() {
           ))}
         </View>
 
-        <Card style={{ backgroundColor: colors.ink }}>
+        <Card style={{ backgroundColor: '#FDCBB5' }}>
           {targets ? (
             <>
-              <Text style={{ color: colors.amber, fontWeight: '700', marginBottom: 4 }}>YOUR DAILY TARGETS</Text>
-              <Text style={{ color: '#fff', fontSize: 28, fontWeight: '800' }}>{targets.kcal} kcal</Text>
-              <Text style={{ color: '#fff', marginTop: 4 }}>
+              <Text style={{ color: colors.coralDeep, fontWeight: '700', marginBottom: 4 }}>YOUR DAILY TARGETS</Text>
+              <Text style={{ color: '#7A3B2E', fontSize: 28, fontWeight: '800' }}>{targets.kcal} kcal</Text>
+              <Text style={{ color: '#7A3B2E', marginTop: 4 }}>
                 {targets.proteinG} g protein · {targets.carbsG} g carbs · {targets.fatG} g fat · {targets.fiberG} g fiber
               </Text>
             </>
           ) : (
-            <Text style={{ color: '#fff' }}>Enter age, height and weight to see your targets.</Text>
+            <Text style={{ color: '#7A3B2E' }}>Enter age, height and weight to see your targets.</Text>
           )}
         </Card>
         <Button title={editing ? 'Save targets' : 'Start logging'} onPress={save} disabled={!targets} />

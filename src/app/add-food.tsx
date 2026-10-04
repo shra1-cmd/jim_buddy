@@ -1,25 +1,30 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '../components/AppText';
+import { Glyph } from '../components/Glyphs';
+import { BowlBuddy } from '../components/Illustrations';
 import { Button, Card, Chip, styles as ui } from '../components/ui';
+import { logMenuPicks, menuCount, menuFor, type MenuItem } from '../db/menu';
 import {
   SLOT_LABEL, addFoodToMeal, createCustomFood, quickAdd, recentFoods, searchFoods,
   type Food, type Slot,
 } from '../db/queries';
 import { todayKey } from '../lib/dates';
+import { DAYS, PORTIONS, dowOfKey, portionFactor, type Portion as Level } from '../lib/menu';
 import { forGrams } from '../lib/nutrition';
-import { colors, space, type } from '../theme';
+import { clay, colors, radius, space, tiles, type } from '../theme';
 
-type Mode = 'search' | 'portion' | 'quick';
+type Mode = 'search' | 'portion' | 'quick' | 'menu';
 
 export default function AddFood() {
   const db = useSQLiteContext();
-  const params = useLocalSearchParams<{ date?: string; slot?: Slot }>();
+  const params = useLocalSearchParams<{ date?: string; slot?: Slot; mode?: 'menu' }>();
   const date = params.date ?? todayKey();
   const slot: Slot = params.slot ?? 'lunch';
 
-  const [mode, setMode] = useState<Mode>('search');
+  const [mode, setMode] = useState<Mode>(params.mode === 'menu' ? 'menu' : 'search');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Food[]>([]);
   const [recents, setRecents] = useState<Food[]>([]);
@@ -49,6 +54,10 @@ export default function AddFood() {
     }} />;
   }
 
+  if (mode === 'menu') {
+    return <MenuPick date={date} slot={slot} onBack={() => setMode('search')} onDone={() => router.back()} />;
+  }
+
   if (mode === 'quick') {
     return <QuickAdd onBack={() => setMode('search')} onSave={async (v, saveAsFood) => {
       if (saveAsFood && v.name) {
@@ -66,19 +75,16 @@ export default function AddFood() {
     <View style={{ flex: 1, padding: space.lg }}>
       <Text style={[type.small, { marginBottom: space.sm }]}>Adding to {SLOT_LABEL[slot]}</Text>
       <TextInput
-        autoFocus
         placeholder="Search: roti, dal, egg, paneer…"
-        placeholderTextColor={colors.muted}
         value={query}
         onChangeText={setQuery}
         style={ui.input}
         returnKeyType="search"
       />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: space.md }}>
-        <Chip label="Quick add kcal" onPress={() => setMode('quick')} />
-        <Chip label="Describe it" onPress={() => router.replace({ pathname: '/scan', params: { date, slot, mode: 'text' } })} />
-        <Chip label="Scan meal" onPress={() => router.replace({ pathname: '/scan', params: { date, slot, mode: 'photo' } })} />
-        <Chip label="Scan label" onPress={() => router.replace({ pathname: '/scan', params: { date, slot, mode: 'label' } })} />
+      <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, marginBottom: space.xs }}>
+        <ActionTile icon="menu" label="Today’s menu" tint={tiles.green} onPress={() => setMode('menu')} />
+        <ActionTile icon="camera" label="Scan meal" tint={tiles.coral} onPress={() => router.replace({ pathname: '/scan', params: { date, slot } })} />
+        <ActionTile icon="bolt" label="Quick add" tint={tiles.yellow} onPress={() => setMode('quick')} />
       </View>
       <Text style={[type.label, { marginTop: space.sm, marginBottom: space.sm }]}>
         {query.trim() ? `RESULTS (${results.length})` : recents.length ? 'RECENT' : 'START TYPING TO SEARCH 1,000+ INDIAN FOODS'}
@@ -208,6 +214,128 @@ function Macro({ label, value }: { label: string; value: number }) {
     <View style={{ alignItems: 'center' }}>
       <Text style={{ fontSize: 20, fontWeight: '800', color: colors.ink }}>{Math.round(value)}</Text>
       <Text style={type.small}>{label}</Text>
+    </View>
+  );
+}
+
+function ActionTile({ icon, label, tint, onPress }: { icon: 'menu' | 'camera' | 'bolt'; label: string; tint: { bg: string; badge: string }; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => ({ flex: 1, alignItems: 'center', paddingVertical: space.md, borderRadius: radius.lg, backgroundColor: tint.bg, boxShadow: clay.tile, transform: [{ scale: pressed ? 0.97 : 1 }] })}
+    >
+      <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: tint.badge, alignItems: 'center', justifyContent: 'center', boxShadow: clay.badge }}>
+        <Glyph name={icon} size={21} accent={tint.badge} />
+      </View>
+      <Text style={{ fontSize: 13, fontWeight: '700', marginTop: 6 }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const PORTION_FILL = ['#FDB79F', '#F7946F', '#F06A4B'];
+
+/** The Low · Medium · High quantity bar. Segments fill up to the chosen level. */
+function PortionBar({ value, onChange }: { value: Level; onChange: (p: Level) => void }) {
+  const idx = PORTIONS.findIndex((p) => p.id === value);
+  return (
+    <View style={{ flexDirection: 'row', gap: 4, backgroundColor: '#F6E2CF', borderRadius: radius.pill, padding: 3, boxShadow: clay.well }}>
+      {PORTIONS.map((p, i) => (
+        <Pressable
+          key={p.id}
+          accessibilityRole="button"
+          accessibilityLabel={`${p.label} portion`}
+          accessibilityState={{ selected: i === idx }}
+          onPress={() => onChange(p.id)}
+          style={{ flex: 1, height: 28, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: i <= idx ? PORTION_FILL[i] : 'transparent', boxShadow: i === idx ? clay.button : undefined }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: i === idx ? '800' : '600', color: i <= idx ? '#fff' : colors.muted }}>{p.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** Today's menu for this meal: tick what you ate and slide each dish to Low / Medium / High. */
+function MenuPick({ date, slot, onBack, onDone }: { date: string; slot: Slot; onBack: () => void; onDone: () => void }) {
+  const db = useSQLiteContext();
+  const dow = dowOfKey(date);
+  const [dishes, setDishes] = useState<MenuItem[] | null>(null);
+  const [any, setAny] = useState(0);
+  const [pick, setPick] = useState<Record<number, { on: boolean; portion: Level }>>({});
+
+  useEffect(() => {
+    (async () => {
+      const [d, n] = await Promise.all([menuFor(db, dow, slot), menuCount(db)]);
+      setDishes(d);
+      setAny(n);
+      setPick(Object.fromEntries(d.map((x) => [x.id, { on: true, portion: 'medium' as Level }])));
+    })();
+  }, [db, dow, slot]);
+
+  const chosen = (dishes ?? []).filter((d) => pick[d.id]?.on).map((d) => ({ item: d, grams: d.grams * portionFactor(pick[d.id].portion) }));
+  const kcal = chosen.reduce((a, c) => a + (c.item.kcal * c.grams) / c.item.grams, 0);
+  const protein = chosen.reduce((a, c) => a + (c.item.protein * c.grams) / c.item.grams, 0);
+
+  if (!dishes) return <View style={{ flex: 1 }} />;
+
+  return (
+    <View style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 120 }}>
+        <Pressable onPress={onBack}>
+          <Text style={{ color: colors.tealDeep, fontWeight: '700', marginBottom: space.md }}>‹ Search instead</Text>
+        </Pressable>
+        <View style={{ backgroundColor: tiles.green.bg, borderRadius: radius.lg, padding: space.lg, flexDirection: 'row', alignItems: 'center', boxShadow: clay.tile, marginBottom: space.md }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 20, fontWeight: '800', color: '#2D5E4C' }}>{DAYS[dow - 1]} · {SLOT_LABEL[slot]}</Text>
+            <Text style={{ color: colors.tealDeep, marginTop: 4 }}>
+              {dishes.length ? 'Untick what you skipped, set how much you took.' : any ? 'Nothing on this meal’s menu.' : 'No weekly menu yet.'}
+            </Text>
+          </View>
+          <BowlBuddy size={70} id="pick" />
+        </View>
+
+        {dishes.length === 0 && (
+          <Button title={any ? 'Edit weekly menu' : 'Upload weekly menu'} variant="secondary" icon="menu" onPress={() => router.push('/menu')} />
+        )}
+
+        {dishes.map((d) => {
+          const st = pick[d.id] ?? { on: true, portion: 'medium' as Level };
+          const g = Math.round(d.grams * portionFactor(st.portion));
+          const f = portionFactor(st.portion);
+          return (
+            <Card key={d.id} style={{ opacity: st.on ? 1 : 0.55 }}>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: st.on }}
+                onPress={() => setPick({ ...pick, [d.id]: { ...st, on: !st.on } })}
+                style={{ flexDirection: 'row', alignItems: 'center', marginBottom: st.on ? space.md : 0 }}
+              >
+                <View style={{ width: 26, height: 26, borderRadius: 8, marginRight: space.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: st.on ? colors.sageDeep : colors.cardHi, boxShadow: st.on ? clay.buttonTeal : clay.well }}>
+                  {st.on && <Glyph name="check" size={16} />}
+                </View>
+                <Text style={[type.h2, { flex: 1 }]} numberOfLines={2}>{d.name}</Text>
+                <Text style={{ fontWeight: '800' }}>{st.on ? Math.round(d.kcal * f) : 0} kcal</Text>
+              </Pressable>
+              {st.on && (
+                <>
+                  <PortionBar value={st.portion} onChange={(p) => setPick({ ...pick, [d.id]: { ...st, portion: p } })} />
+                  <Text style={[type.small, { marginTop: 6 }]}>{g} g · {Math.round(d.protein * f * 10) / 10} g protein · medium is {Math.round(d.grams)} g</Text>
+                </>
+              )}
+            </Card>
+          );
+        })}
+      </ScrollView>
+      {dishes.length > 0 && (
+        <View style={{ position: 'absolute', left: space.lg, right: space.lg, bottom: space.lg }}>
+          <Button
+            title={chosen.length ? `Add ${chosen.length} to ${SLOT_LABEL[slot]} · ${Math.round(kcal)} kcal · ${Math.round(protein)} g protein` : 'Pick at least one dish'}
+            disabled={!chosen.length}
+            onPress={async () => { await logMenuPicks(db, date, slot, chosen); onDone(); }}
+          />
+        </View>
+      )}
     </View>
   );
 }

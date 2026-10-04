@@ -1,7 +1,8 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '../components/AppText';
 import { Button, Card, Chip, SectionLabel, styles as ui } from '../components/ui';
 import { GROUPS, allExercises, type Exercise, type Group } from '../data/exercises';
 import { addExerciseToSession, addPlanExercise, createCustomExercise, loadCustomExercises } from '../db/training';

@@ -1,7 +1,8 @@
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { Text, TextInput } from '../components/AppText';
 import { MiniLine } from '../components/MiniLine';
 import { Button, Card, Chip, SectionLabel, styles as ui } from '../components/ui';
 import { MEASURES, measurementEntries, saveMeasurements, type MeasureKey, type Measurement } from '../db/body';

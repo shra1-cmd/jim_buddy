@@ -1,3 +1,9 @@
+import { Nunito_500Medium } from '@expo-google-fonts/nunito/500Medium';
+import { Nunito_600SemiBold } from '@expo-google-fonts/nunito/600SemiBold';
+import { Nunito_700Bold } from '@expo-google-fonts/nunito/700Bold';
+import { Nunito_800ExtraBold } from '@expo-google-fonts/nunito/800ExtraBold';
+import { Nunito_900Black } from '@expo-google-fonts/nunito/900Black';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { SQLiteProvider } from 'expo-sqlite';
@@ -7,9 +13,9 @@ import { ActivityIndicator, View } from 'react-native';
 import { IntroReveal } from '../components/IntroReveal';
 import { migrateDbIfNeeded } from '../db/migrate';
 import { configureNotifications } from '../lib/restTimer';
-import { colors } from '../theme';
+import { colors, fonts } from '../theme';
 
-// Keep the system splash (the Two-plates mark) up until the database is migrated and seeded.
+// Keep the system splash up until fonts are loaded and the database is migrated and seeded.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 try {
   configureNotifications();
@@ -25,11 +31,14 @@ function HideSplashWhenReady() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({ Nunito_500Medium, Nunito_600SemiBold, Nunito_700Bold, Nunito_800ExtraBold, Nunito_900Black });
+  if (!fontsLoaded && !fontError) return null;
+
   return (
     <Suspense
       fallback={
-        <View style={{ flex: 1, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.amber} />
+        <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={colors.coral} />
         </View>
       }
     >
@@ -41,7 +50,8 @@ export default function RootLayout() {
             headerShadowVisible: false,
             headerStyle: { backgroundColor: colors.bg },
             headerTintColor: colors.ink,
-            headerTitleStyle: { fontWeight: '700' },
+            headerTitleStyle: { fontFamily: fonts.black, fontSize: 19, color: colors.ink },
+            headerBackButtonDisplayMode: 'minimal',
             contentStyle: { backgroundColor: colors.bg },
           }}
         >
@@ -50,6 +60,7 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding" options={{ title: 'Your targets' }} />
           <Stack.Screen name="add-food" options={{ presentation: 'modal', title: 'Add food' }} />
           <Stack.Screen name="scan" options={{ title: 'Scan meal' }} />
+          <Stack.Screen name="menu" options={{ title: 'Weekly menu' }} />
           <Stack.Screen name="exercise-picker" options={{ presentation: 'modal', title: 'Add exercises' }} />
           <Stack.Screen name="exercise/[id]" options={{ title: '' }} />
           <Stack.Screen name="plan/[id]" options={{ title: 'Edit plan' }} />

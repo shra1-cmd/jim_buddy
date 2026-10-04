@@ -1,7 +1,8 @@
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
+import { Text } from '../../components/AppText';
 import { BodyMap } from '../../components/BodyMap';
 import { DemoCredit, ExerciseDemo } from '../../components/ExerciseDemo';
 import { Button, Card, SectionLabel } from '../../components/ui';
@@ -76,7 +77,7 @@ export default function ExerciseDetail() {
         <BodyMap levels={levels} side="front" scale={0.7} />
         <BodyMap levels={levels} side="back" scale={0.7} />
       </Card>
-      <Text style={[type.small, { marginTop: -space.sm, marginBottom: space.md }]}>Solid amber: primary. Light: secondary.</Text>
+      <Text style={[type.small, { marginTop: -space.sm, marginBottom: space.md }]}>Solid coral: primary muscles. Light: secondary.</Text>
 
       <SectionLabel>Defaults</SectionLabel>
       <Card style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
