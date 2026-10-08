@@ -1,15 +1,14 @@
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { Text } from '../../components/AppText';
 import { BodyMap } from '../../components/BodyMap';
 import { DemoCredit, ExerciseDemo } from '../../components/ExerciseDemo';
 import { Button, Card, SectionLabel } from '../../components/ui';
 import { exerciseById } from '../../data/exercises';
-import { activeSession, addExerciseToSession, exerciseHistory, loadCustomExercises, startSession } from '../../db/training';
+import { addPlanExercise, createPlan, exerciseHistory, listPlans, loadCustomExercises } from '../../db/training';
 import { fromKey } from '../../lib/dates';
-import { ensureTimerPermission } from '../../lib/restTimer';
 import { bestE1rm } from '../../lib/training';
 import { colors, space, type } from '../../theme';
 
@@ -53,17 +52,18 @@ export default function ExerciseDetail() {
   e.secondary.forEach((m) => (levels[m] = 1));
   e.primary.forEach((m) => (levels[m] = 2));
 
-  const addToWorkout = async () => {
-    const active = await activeSession(db);
-    await ensureTimerPermission();
-    if (active) {
-      await addExerciseToSession(db, active.id, e.id);
-      router.push(`/workout/${active.id}`);
-    } else {
-      const sid = await startSession(db, null);
-      await addExerciseToSession(db, sid, e.id);
-      router.push(`/workout/${sid}`);
-    }
+  const addTo = async (planId: string) => {
+    await addPlanExercise(db, planId, e.id);
+    router.push(`/plan/${planId}`);
+  };
+  const addToPlan = async () => {
+    const plans = await listPlans(db);
+    if (!plans.length) return addTo(await createPlan(db, 'Plan 1'));
+    Alert.alert('Add to which plan?', undefined, [
+      ...plans.slice(0, 5).map((p) => ({ text: p.name, onPress: () => addTo(p.id) })),
+      { text: 'New plan', onPress: async () => addTo(await createPlan(db, `Plan ${plans.length + 1}`)) },
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
   };
 
   return (
@@ -126,7 +126,7 @@ export default function ExerciseDetail() {
           </Card>
         </>
       )}
-      <Button title="Add to workout" onPress={addToWorkout} />
+      <Button title="Add to a plan" onPress={addToPlan} />
     </ScrollView>
   );
 }

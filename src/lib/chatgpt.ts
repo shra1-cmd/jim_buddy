@@ -32,12 +32,25 @@ Use plain numbers (no units). If the food looks oily, add cooking oil/ghee as it
 
 export function menuPrompt(): string {
   return `You are a nutrition assistant who knows Indian hostel, PG and mess food well.
-I'm sending my weekly mess menu (a photo or text). Turn it into a table with ONE dish per line.
-For each dish estimate a typical MEDIUM serving at an Indian mess in grams, and the nutrition for that serving (not per 100 g).
-Split combos into separate dishes ("Rice, Dal, Curd" → 3 lines). If something is served every day, write "Daily" as the day.
-Reply ONLY with a table in exactly this format, no other text:
+I'll send a photo of my weekly mess menu next. Work in two steps.
+
+STEP 1 – Read the photo and list everything day by day (Monday to Sunday), grouped as breakfast, lunch, snacks and dinner.
+Split combos into separate dishes ("Rice, Dal, Curd" → 3 dishes). Then ask me if anything is wrong or missing, and wait.
+I may change dishes or skip meals I don't eat; keep updating the list until I say "final".
+
+STEP 2 – When I say "final", reply ONLY with this table, one dish per line, no other text:
 day | meal | item | grams | kcal | protein | carbs | fat | fiber
-day = Mon, Tue, Wed, Thu, Fri, Sat, Sun or Daily · meal = breakfast, lunch, snacks or dinner · plain numbers only.`;
+day = Mon, Tue, Wed, Thu, Fri, Sat, Sun or Daily (served every day) · meal = breakfast, lunch, snacks or dinner.
+grams = a typical MEDIUM serving at an Indian mess; nutrition is for that serving (not per 100 g). Plain numbers only.`;
+}
+
+/** Asks ChatGPT for daily targets that fit the user's body and goal. */
+export function targetsPrompt(o: { sex: string; age: number; heightCm: number; weightKg: number; activity: string; goal: string }): string {
+  return `You are a sports nutritionist. Suggest my daily nutrition targets.
+Me: ${o.sex}, ${o.age} years, ${o.heightCm} cm, ${o.weightKg} kg. Daily life: ${o.activity.toLowerCase()} (workouts not included). Goal: ${o.goal.toLowerCase()}.
+I eat mostly Indian food and lift weights. Ask me anything that would change the answer (diet type, training days, health conditions).
+When we agree, end with one line in exactly this format:
+kcal | protein g | carbs g | fat g | fiber g`;
 }
 
 // ---------- parsing ----------

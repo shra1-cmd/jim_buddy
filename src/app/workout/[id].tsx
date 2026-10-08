@@ -10,7 +10,7 @@ import { exerciseById } from '../../data/exercises';
 import { getProfile } from '../../db/queries';
 import {
   addSet, discardSession, exerciseHistory, finishSession, getSession, lastSetsFor, loadCustomExercises, removeExerciseFromSession,
-  removeSet, updateSet, type Session, type SetRow,
+  removeSet, startSessionClock, updateSet, type Session, type SetRow,
 } from '../../db/training';
 import { cancelRestEnd, scheduleRestEnd } from '../../lib/restTimer';
 import { bestE1rm, formatDuration, sessionVolume, suggestLoad } from '../../lib/training';
@@ -47,16 +47,17 @@ export default function WorkoutScreen() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const active = session?.status === 'active';
+  const clockOn = sets.some((s) => s.done); // the clock only runs once a set is ticked
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || !clockOn) return;
     activateKeepAwakeAsync('workout').catch(() => {});
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => {
       clearInterval(t);
       try { Promise.resolve(deactivateKeepAwake('workout')).catch(() => {}); } catch { /* not active */ }
     };
-  }, [active]);
+  }, [active, clockOn]);
 
   const restLeft = restEnd ? Math.max(0, Math.round((restEnd - now) / 1000)) : 0;
   useEffect(() => {
@@ -78,6 +79,11 @@ export default function WorkoutScreen() {
 
   if (!session) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
 
+  const shown = groups;
+  // header: the exercise in hand (the first one with sets left), never the plan name
+  const current = (groups.find((g) => g.sets.some((x) => !x.done && !x.is_warmup)) ?? groups[groups.length - 1])?.exerciseId;
+  const title = current ? exerciseById(current)?.name ?? 'Workout' : 'Workout';
+
   const persist = async (s: SetRow, patch: Partial<SetRow> = {}) => {
     const ex = exerciseById(s.exercise_id);
     const d = drafts[s.id] ?? toDraft(s);
@@ -89,7 +95,13 @@ export default function WorkoutScreen() {
   };
 
   const toggleDone = async (s: SetRow) => {
+    const first = !s.done && !sets.some((x) => x.done);
     const next = await persist(s, { done: s.done ? 0 : 1 });
+    if (first && session) {
+      const at = await startSessionClock(db, sessionId);
+      setSession({ ...session, started_at: at });
+      setNow(Date.now());
+    }
     if (next.done && !next.is_warmup) {
       const rest = next.rest_s ?? exerciseById(next.exercise_id)?.restSec ?? 90;
       if (rest > 0) {
@@ -146,19 +158,26 @@ export default function WorkoutScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Stack.Screen options={{ title: active ? `${session.name} · ${formatDuration(elapsed)}` : session.name }} />
+      <Stack.Screen
+        options={{
+          title: active ? title : session.name,
+          headerRight: active && clockOn ? () => <ClockPill text={formatDuration(elapsed)} /> : undefined,
+        }}
+      />
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: restEnd && active ? 140 : 60 }} keyboardShouldPersistTaps="handled">
         {!active && (
           <Card>
             <Text style={type.h2}>{new Date(session.started_at).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</Text>
             <Text style={type.small}>
-              {session.ended_at ? `${Math.round((Date.parse(session.ended_at) - Date.parse(session.started_at)) / 60000)} min · ` : ''}
               {sessionVolume(sets)} kg volume · ~{Math.round(session.kcal)} kcal
             </Text>
           </Card>
         )}
 
-        {groups.map((g) => {
+        {active && !clockOn && (
+          <Text style={[type.small, { marginBottom: space.sm }]}>Enter kg and reps, then tick ✓. The timer starts with your first set.</Text>
+        )}
+        {shown.map((g) => {
           const ex = exerciseById(g.exerciseId);
           const lt = ex?.logType ?? 'weight_reps';
           const last = lastByEx[g.exerciseId] ?? [];
@@ -314,5 +333,14 @@ function RestBtn({ label, onPress }: { label: string; onPress: () => void }) {
     <Pressable onPress={onPress} style={{ marginLeft: 8, paddingHorizontal: 12, height: 40, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ color: '#fff', fontWeight: '700' }}>{label}</Text>
     </Pressable>
+  );
+}
+
+function ClockPill({ text }: { text: string }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.teal, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4, marginRight: 4 }}>
+      <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#BFF0DC', marginRight: 6 }} />
+      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13, fontVariant: ['tabular-nums'] }}>{text}</Text>
+    </View>
   );
 }

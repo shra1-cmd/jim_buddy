@@ -4,7 +4,7 @@ import Svg, { Circle, Ellipse, G, Line, Path, Rect } from 'react-native-svg';
 // Small solid glyphs for badges, buttons and tabs. All original, drawn on a 24×24 grid.
 export type GlyphName =
   | 'fork' | 'egg' | 'bolt' | 'flame' | 'steps' | 'sun' | 'moon' | 'bowl' | 'cup' | 'dumbbell'
-  | 'menu' | 'camera' | 'plus' | 'play' | 'chevron' | 'gear' | 'home' | 'book' | 'person' | 'check' | 'scale' | 'heart';
+  | 'menu' | 'camera' | 'plus' | 'play' | 'pause' | 'chevron' | 'gear' | 'home' | 'book' | 'person' | 'check' | 'scale' | 'heart';
 
 export function Glyph({ name, size = 22, color = '#fff', accent }: { name: GlyphName; size?: number; color?: string; accent?: string }) {
   const s = { stroke: color, strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' };
@@ -118,6 +118,14 @@ export function Glyph({ name, size = 22, color = '#fff', accent }: { name: Glyph
       break;
     case 'play':
       body = <Path d="M8.5 5.6v12.8c0 .8.9 1.3 1.6.9l10-6.4a1 1 0 0 0 0-1.8l-10-6.4c-.7-.4-1.6.1-1.6.9z" fill={color} />;
+      break;
+    case 'pause':
+      body = (
+        <>
+          <Rect x="6.5" y="5" width="4" height="14" rx="1.4" fill={color} />
+          <Rect x="13.5" y="5" width="4" height="14" rx="1.4" fill={color} />
+        </>
+      );
       break;
     case 'chevron':
       body = <Path d="m9 5 7 7-7 7" {...s} strokeWidth={2.6} />;

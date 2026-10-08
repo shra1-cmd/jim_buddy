@@ -72,3 +72,10 @@ export function parseSlot(cell: string): MenuSlot | null {
   if (/dinner|supper|night/.test(c)) return 'dinner';
   return null;
 }
+
+/** The date of weekday `dow` (1 Mon … 7 Sun) in the same Monday-to-Sunday week as `todayKey`. */
+export function keyForDowThisWeek(todayKey: string, dow: number): string {
+  const [y, m, d] = todayKey.split('-').map(Number);
+  const x = new Date(y, m - 1, d + (dow - dowOfKey(todayKey)), 12);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}

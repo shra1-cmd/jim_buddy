@@ -18,7 +18,6 @@ export default function History() {
       <Stack.Screen options={{ title: 'History' }} />
       {rows.length === 0 && <Text style={type.small}>No finished workouts or games yet.</Text>}
       {rows.map((s) => {
-        const mins = s.ended_at ? Math.round((Date.parse(s.ended_at) - Date.parse(s.started_at)) / 60000) : 0;
         return (
           <Pressable key={s.id} onPress={() => s.kind !== 'sport' && router.push(`/workout/${s.id}`)}>
             <Card style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -26,7 +25,7 @@ export default function History() {
               <View style={{ flex: 1, marginLeft: space.md }}>
                 <Text style={type.h2}>{s.name}</Text>
                 <Text style={type.small}>
-                  {fromKey(s.local_date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} · {mins} min
+                  {fromKey(s.local_date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
                   {s.kind === 'sport' ? '' : ` · ${s.sets} sets · ${Math.round(s.volume)} kg`} · ~{Math.round(s.kcal)} kcal
                 </Text>
               </View>

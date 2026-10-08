@@ -4,18 +4,19 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { Text } from '../../components/AppText';
 import { Glyph } from '../../components/Glyphs';
-import { Bar, Button, Card, IconBadge, Ring } from '../../components/ui';
+import { Seesaw } from '../../components/Seesaw';
+import { CalorieRing } from '../../components/CalorieRing';
+import { Bar, Button, Card, IconBadge } from '../../components/ui';
 import { syncPhoneSteps } from '../../db/activity';
 import { menuCount, menuSlotCounts } from '../../db/menu';
 import {
-  SLOT_LABEL, SLOT_SHARE, SLOTS, copyMeal, deleteMealItem, getProfile, mealItemsForDay, slotForNow,
+  SLOT_LABEL, SLOTS, copyMeal, deleteMealItem, getProfile, mealItemsForDay,
   type MealItem, type Profile, type Slot,
 } from '../../db/queries';
 import { burnedOn } from '../../db/training';
 import { addDays, dayLabel, todayKey } from '../../lib/dates';
 import { dowOfKey } from '../../lib/menu';
 import { quantityLabel, sum } from '../../lib/nutrition';
-import { caloriesLeft } from '../../lib/targets';
 import { clay, colors, macro, radius, space, tiles, type } from '../../theme';
 
 const SLOT_STYLE = {
@@ -33,6 +34,7 @@ export default function JournalScreen() {
   const [burned, setBurned] = useState(0);
   const [menuTotal, setMenuTotal] = useState(0);
   const [menuSlots, setMenuSlots] = useState<Partial<Record<Slot, number>>>({});
+  const [open, setOpen] = useState<Partial<Record<Slot, boolean>>>({});
 
   const load = useCallback(async () => {
     if (date >= addDays(todayKey(), -6)) await syncPhoneSteps(db, false); // silent: only if already allowed
@@ -50,7 +52,9 @@ export default function JournalScreen() {
 
   const totals = useMemo(() => sum(items), [items]);
   const target = profile?.kcal ?? 2000;
-  const left = caloriesLeft(target, totals.kcal, burned, profile?.eatBackPct ?? 50);
+  const eatBack = profile?.eatBackPct ?? 50;
+  const burnedCounted = Math.round(burned * (eatBack / 100));
+  const budget = target + burnedCounted; // what you may eat today
 
   const openAdd = (slot: Slot, mode?: 'menu') => router.push({ pathname: '/add-food', params: { date, slot, ...(mode ? { mode } : {}) } });
 
@@ -81,9 +85,8 @@ export default function JournalScreen() {
       {/* Day summary */}
       <Card>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.lg }}>
-          <Stat value={totals.kcal} label="Eaten" />
-          <Ring progress={totals.kcal / target} center={String(Math.abs(left))} sub={left >= 0 ? 'kcal left' : 'kcal over'} />
-          <Stat value={burned} label="Burned" />
+          <Seesaw eaten={totals.kcal} burned={burned} need={target} budget={budget} />
+          <CalorieRing eaten={totals.kcal} budget={budget} />
         </View>
         <Bar big label="Protein" value={totals.protein} target={profile?.proteinG ?? 120} color={macro.protein} />
         <View style={{ flexDirection: 'row', gap: space.md }}>
@@ -93,7 +96,6 @@ export default function JournalScreen() {
         </View>
       </Card>
 
-      <Button title="Scan meal" icon="camera" onPress={() => router.push({ pathname: '/scan', params: { date, slot: slotForNow() } })} style={{ marginBottom: space.sm }} />
       <Button
         title={menuTotal ? 'Weekly menu' : 'Upload weekly menu'}
         icon="menu"
@@ -105,17 +107,32 @@ export default function JournalScreen() {
       {SLOTS.map((slot) => {
         const slotItems = items.filter((i) => i.slot === slot);
         const t = sum(slotItems);
-        const budget = Math.round(target * SLOT_SHARE[slot]);
         const st = SLOT_STYLE[slot];
         const onMenu = menuSlots[slot] ?? 0;
+        const hasItems = slotItems.length > 0;
+        const isOpen = hasItems && !!open[slot];
         return (
           <Card key={slot} style={{ paddingVertical: space.md }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <IconBadge name={st.icon} color={st.tint.badge} size={42} />
-              <View style={{ flex: 1, marginLeft: space.md }}>
-                <Text style={type.h2}>{SLOT_LABEL[slot]}</Text>
-                <Text style={type.small}>{Math.round(t.kcal)} / {budget} kcal · {Math.round(t.protein)} g protein</Text>
-              </View>
+              <Pressable
+                onPress={() => hasItems && setOpen((o) => ({ ...o, [slot]: !o[slot] }))}
+                disabled={!hasItems}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: isOpen }}
+                accessibilityLabel={`${SLOT_LABEL[slot]}, ${slotItems.length} item${slotItems.length === 1 ? '' : 's'}`}
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+              >
+                <IconBadge name={st.icon} color={st.tint.badge} size={42} />
+                <View style={{ flex: 1, marginLeft: space.md }}>
+                  <Text style={type.h2}>{SLOT_LABEL[slot]}</Text>
+                  <Text style={type.small}>{hasItems ? macroLine(t) : 'Nothing logged yet'}</Text>
+                </View>
+                {hasItems && (
+                  <View style={{ paddingHorizontal: space.sm, transform: [{ rotate: isOpen ? '-90deg' : '90deg' }] }}>
+                    <Glyph name="chevron" size={16} color={colors.muted} />
+                  </View>
+                )}
+              </Pressable>
               <Pressable
                 accessibilityLabel={`Add food to ${SLOT_LABEL[slot]}`}
                 onPress={() => openAdd(slot, onMenu > 0 ? 'menu' : undefined)}
@@ -124,16 +141,18 @@ export default function JournalScreen() {
                 <Glyph name="plus" size={22} />
               </Pressable>
             </View>
-            {slotItems.map((it) => (
+            {isOpen && slotItems.map((it) => (
               <Pressable key={it.id} onPress={() => onItemPress(it)} style={{ flexDirection: 'row', alignItems: 'center', paddingTop: space.md, marginTop: space.md, borderTopWidth: 1, borderTopColor: colors.line }}>
                 <View style={{ flex: 1, paddingRight: space.sm }}>
                   <Text style={type.body} numberOfLines={1}>{it.name}</Text>
-                  <Text style={type.small}>{it.source === 'quick' ? 'Quick add' : quantityLabel(it.qty, it.unit)}{it.source === 'menu' ? ' · menu' : it.source === 'chatgpt' ? ' · ChatGPT' : ''}</Text>
+                  <Text style={type.small}>
+                    {it.source === 'quick' ? 'Quick add' : quantityLabel(it.qty, it.unit)} · {Math.round(it.carbs)} g carbs · {Math.round(it.protein)} g protein
+                  </Text>
                 </View>
-                <Text style={{ fontWeight: '700' }}>{Math.round(it.kcal)}</Text>
+                <Text style={{ fontWeight: '700' }}>{Math.round(it.kcal)} kcal</Text>
               </Pressable>
             ))}
-            {slotItems.length === 0 && (
+            {!hasItems && (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginTop: space.md }}>
                 {onMenu > 0 && (
                   <Pressable onPress={() => openAdd(slot, 'menu')} accessibilityRole="button">
@@ -166,11 +185,6 @@ function RoundNav({ dir, onPress }: { dir: 'back' | 'next'; onPress: () => void 
   );
 }
 
-function Stat({ value, label }: { value: number; label: string }) {
-  return (
-    <View style={{ alignItems: 'center', width: 70 }}>
-      <Text style={{ fontSize: 22, fontWeight: '800' }}>{Math.round(value)}</Text>
-      <Text style={type.small}>{label}</Text>
-    </View>
-  );
+function macroLine(t: { kcal: number; carbs: number; protein: number }) {
+  return `${Math.round(t.kcal)} kcal · ${Math.round(t.carbs)} g carbs · ${Math.round(t.protein)} g protein`;
 }

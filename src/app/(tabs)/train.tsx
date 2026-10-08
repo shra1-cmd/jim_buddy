@@ -9,12 +9,11 @@ import { GROUPS, MUSCLE_LABEL, STARTER_TEMPLATES, allExercises, exercisesForMusc
 import { clearManualSteps, deleteSport, getSteps, logSport, setManualSteps, sportsOn, syncPhoneSteps, type StepSync } from '../../db/activity';
 import { getProfile, type Profile } from '../../db/queries';
 import {
-  activeSession, burnBreakdown, createPlan, createPlanFromTemplate, listPlans, loadCustomExercises, startSession,
+  activeSession, burnBreakdown, createPlan, createPlanFromTemplate, listPlans, loadCustomExercises,
   type Burn, type Plan, type Session,
 } from '../../db/training';
-import { SPORTS, sportKcal, stepBaseline, type Intensity } from '../../lib/activity';
+import { SPORTS, STEP_GOAL, sportKcal, type Intensity } from '../../lib/activity';
 import { todayKey } from '../../lib/dates';
-import { ensureTimerPermission } from '../../lib/restTimer';
 import { clay, colors, radius, space, tiles, type } from '../../theme';
 
 type View_ = 'workouts' | 'activity' | 'exercises';
@@ -37,11 +36,6 @@ export default function TrainScreen() {
   }, [db]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const start = async (planId: string | null) => {
-    await ensureTimerPermission();
-    const id = await startSession(db, planId);
-    router.push(`/workout/${id}`);
-  };
 
   return (
     <View style={{ flex: 1 }}>
@@ -65,7 +59,7 @@ export default function TrainScreen() {
         )}
 
         {view === 'workouts' ? (
-          <Workouts db={db} plans={plans} onStart={start} reload={load} />
+          <Workouts db={db} plans={plans} reload={load} />
         ) : view === 'activity' ? (
           <Activity db={db} />
         ) : (
@@ -73,20 +67,11 @@ export default function TrainScreen() {
         )}
       </ScrollView>
 
-      {!active && view === 'workouts' && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => start(null)}
-          style={({ pressed }) => ({ position: 'absolute', right: space.lg, bottom: space.lg, backgroundColor: colors.coral, borderRadius: radius.pill, paddingHorizontal: 20, height: 52, alignItems: 'center', justifyContent: 'center', boxShadow: clay.button, transform: [{ scale: pressed ? 0.97 : 1 }] })}
-        >
-          <Text style={{ fontWeight: '800', color: '#fff', fontSize: 15 }}>＋ Empty workout</Text>
-        </Pressable>
-      )}
     </View>
   );
 }
 
-function Workouts({ db, plans, onStart, reload }: { db: ReturnType<typeof useSQLiteContext>; plans: (Plan & { count: number })[]; onStart: (id: string | null) => void; reload: () => void }) {
+function Workouts({ db, plans, reload }: { db: ReturnType<typeof useSQLiteContext>; plans: (Plan & { count: number })[]; reload: () => void }) {
   const newPlan = async () => {
     const id = await createPlan(db, `Plan ${plans.length + 1}`);
     router.push(`/plan/${id}`);
@@ -114,11 +99,10 @@ function Workouts({ db, plans, onStart, reload }: { db: ReturnType<typeof useSQL
             <View style={{ flex: 1, marginLeft: space.md }}>
               <Text style={type.h2}>{p.name}</Text>
               <Text style={type.small}>
-                {p.count} exercises{p.days ? ` · ${p.days.split(',').map((d) => DAY[Number(d)]).join(' ')}` : ''}  · edit ›
+                {p.count} exercises{p.days ? ` · ${p.days.split(',').map((d) => DAY[Number(d)]).join(' ')}` : ''}
               </Text>
             </View>
           </Pressable>
-          <Button title="Start" onPress={() => (p.count ? onStart(p.id) : Alert.alert('Empty plan', 'Add exercises first.'))} style={{ marginTop: space.md, height: 42 }} />
         </Card>
       ))}
       <View style={{ flexDirection: 'row', gap: space.sm, marginBottom: space.lg }}>
@@ -169,7 +153,6 @@ function Activity({ db }: { db: ReturnType<typeof useSQLiteContext> }) {
   useFocusEffect(useCallback(() => { syncNow(); }, [syncNow]));
 
   const weight = profile?.weightKg ?? 70;
-  const baseline = stepBaseline(profile?.activity ?? 1.2);
   const sp = SPORTS.find((x) => x.id === sport)!;
   const mins = Math.max(0, Number(minutes.replace(',', '.')) || 0);
   const preview = sportKcal(sp.met[intensity], weight, mins);
@@ -211,13 +194,13 @@ function Activity({ db }: { db: ReturnType<typeof useSQLiteContext> }) {
       <Card>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 28, fontWeight: '800', color: colors.ink }}>{(burn?.stepCount ?? 0).toLocaleString('en-IN')}</Text>
-          <Text style={type.small}>≈ {burn?.steps ?? 0} kcal extra</Text>
+          <Text style={type.small}>≈ {burn?.steps ?? 0} kcal</Text>
         </View>
         <View style={{ height: 10, backgroundColor: '#F6E2CF', borderRadius: 5, marginVertical: space.sm, overflow: 'hidden', boxShadow: clay.well }}>
-          <View style={{ width: `${Math.min(100, ((burn?.stepCount ?? 0) / Math.max(baseline * 1.6, 1)) * 100)}%`, height: 8, backgroundColor: colors.sageDeep, borderRadius: 4 }} />
+          <View style={{ width: `${Math.min(100, ((burn?.stepCount ?? 0) / STEP_GOAL) * 100)}%`, height: 8, backgroundColor: colors.sageDeep, borderRadius: 4 }} />
         </View>
         <Text style={type.small}>
-          {stepNote} Your first {baseline.toLocaleString('en-IN')} steps are already inside your calorie target, so only steps above that count.
+          {stepNote} Every 100 steps ≈ 3.3 kcal. Bar goal: {STEP_GOAL.toLocaleString('en-IN')} steps.
         </Text>
         <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md }}>
           <TextInput value={manual} onChangeText={setManual} keyboardType="number-pad" placeholder="Today’s steps" placeholderTextColor={colors.muted} style={[ui.input, { flex: 1 }]} accessibilityLabel="Today's steps" />

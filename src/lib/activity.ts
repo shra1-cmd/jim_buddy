@@ -12,9 +12,12 @@ export function stepBaseline(activity: number): number {
   return 5000;
 }
 
-/** Net walking cost ≈ 0.5 kcal per kg per km, ~1,300 steps per km → 0.00038 kcal per step per kg. */
-export function stepsKcal(steps: number, weightKg: number, baseline: number): number {
-  return Math.round(Math.max(0, steps - baseline) * weightKg * 0.00038);
+/** Active calories from walking: 100 steps ≈ 3.3 kcal, every step counts. */
+export const KCAL_PER_STEP = 0.033;
+export const STEP_GOAL = 10000;
+
+export function stepsKcal(steps: number): number {
+  return Math.round(Math.max(0, steps) * KCAL_PER_STEP);
 }
 
 // ---------- sports ----------

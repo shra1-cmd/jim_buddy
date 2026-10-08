@@ -7,16 +7,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '../../components/AppText';
 import { MacroDonut, WeekBars } from '../../components/Charts';
 import { Glyph } from '../../components/Glyphs';
-import { BowlBuddy, DumbbellArt, Mascot, Plant, Sparkle } from '../../components/Illustrations';
-import { Card, IconBadge, Pill, RoundButton, SectionLabel, StatTile } from '../../components/ui';
+import { DumbbellArt, Mascot, Plant } from '../../components/Illustrations';
+import { MacroSheet } from '../../components/MacroSheet';
+import { Card, IconBadge, Pill, RoundButton, StatTile } from '../../components/ui';
 import { syncPhoneSteps } from '../../db/activity';
 import { loggedDays } from '../../db/body';
-import { menuCount, menuSlotCounts } from '../../db/menu';
+import { menuSlotCounts } from '../../db/menu';
 import {
-  SLOT_LABEL, SLOTS, SLOT_SHARE, dayTotals, getProfile, mealItemsForDay, slotForNow, type MealItem, type Profile, type Slot,
+  SLOT_LABEL, SLOTS, dayTotals, getProfile, mealItemsForDay, slotForNow, type MealItem, type Profile, type Slot,
 } from '../../db/queries';
 import { getSetting } from '../../db/settings';
-import { activeSession, burnBreakdown, listPlans, sessionsSince, startSession, type Burn, type Plan, type Session } from '../../db/training';
+import { activeSession, burnBreakdown, listPlans, sessionsSince, type Burn, type Plan, type Session } from '../../db/training';
 import { currentStreak, weekStartKey } from '../../lib/balance';
 import { addDays, fromKey, todayKey } from '../../lib/dates';
 import { dowOfKey } from '../../lib/menu';
@@ -41,7 +42,6 @@ interface State {
   weekKcal: number[];
   weekProtein: number[];
   streak: number;
-  menuTotal: number;
   menuSlots: Partial<Record<Slot, number>>;
   backupDue: boolean;
 }
@@ -51,15 +51,17 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [s, setS] = useState<State | null>(null);
   const [metric, setMetric] = useState<'kcal' | 'protein'>('kcal');
+  const [pickMeal, setPickMeal] = useState(false);
+  const [showMacros, setShowMacros] = useState(false);
   const today = todayKey();
   const monday = weekStartKey(fromKey(today));
   const dow = dowOfKey(today);
 
   const load = useCallback(async () => {
     await syncPhoneSteps(db, false);
-    const [profile, items, burn, week, plans, active, totals, logged, mt, ms, lastBackup, firstMeal] = await Promise.all([
+    const [profile, items, burn, week, plans, active, totals, logged, ms, lastBackup, firstMeal] = await Promise.all([
       getProfile(db), mealItemsForDay(db, today), burnBreakdown(db, today), sessionsSince(db, monday), listPlans(db), activeSession(db),
-      dayTotals(db, monday, addDays(monday, 6)), loggedDays(db, addDays(today, -120), today), menuCount(db), menuSlotCounts(db, dow),
+      dayTotals(db, monday, addDays(monday, 6)), loggedDays(db, addDays(today, -120), today), menuSlotCounts(db, dow),
       getSetting(db, 'last_backup_at'), db.getFirstAsync<{ d: string | null }>('SELECT MIN(local_date) AS d FROM meal_item'),
     ]);
     const byDay = (k: 'kcal' | 'protein') => Array.from({ length: 7 }, (_, i) => totals.find((t) => t.local_date === addDays(monday, i))?.[k] ?? 0);
@@ -70,7 +72,6 @@ export default function HomeScreen() {
       weekKcal: byDay('kcal'),
       weekProtein: byDay('protein'),
       streak: currentStreak(logged, today),
-      menuTotal: mt,
       menuSlots: ms,
       backupDue: lastBackup ? lastBackup.slice(0, 10) < weekAgo : !!firstMeal?.d && firstMeal.d <= weekAgo,
     });
@@ -94,16 +95,20 @@ export default function HomeScreen() {
   const greet = hour >= 5 && hour < 12 ? ['Good Morning', '☀️'] : hour >= 12 && hour < 17 ? ['Good Afternoon', '🌤️'] : ['Good Evening', '🌙'];
   const name = profile?.name || 'there';
 
-  const openSlot = (slot: Slot) =>
+  const openSlot = (slot: Slot) => {
+    setPickMeal(false);
     router.push({ pathname: '/add-food', params: { slot, ...((s.menuSlots[slot] ?? 0) > 0 ? { mode: 'menu' } : {}) } });
+  };
+  const chooseMeal = () => setPickMeal((v) => !v);
 
   const hero = s.active
     ? { sub: 'Your workout is in progress. Keep going!', cta: 'Resume workout', go: () => router.push(`/workout/${s.active!.id}`) }
     : plan && !trainedToday
-      ? { sub: `Today: ${plan.name} · ${plan.count} exercises. Let’s lift!`, cta: 'Start workout', go: async () => router.push(`/workout/${await startSession(db, plan.id)}`) }
+      ? { sub: `Today: ${plan.name} · ${plan.count} exercises. Let’s lift!`, cta: 'Log workout', go: () => router.push(`/plan/${plan.id}`) }
       : trainedToday
-        ? { sub: 'Workout done. Time to refuel well!', cta: 'Log a meal', go: () => openSlot(slotForNow()) }
-        : { sub: 'Let’s fuel up and move today!', cta: 'Log a meal', go: () => openSlot(slotForNow()) };
+        ? { sub: 'Workout done. Time to refuel well!', cta: 'Log a meal', go: chooseMeal }
+        : { sub: 'Let’s fuel up and move today!', cta: 'Log a meal', go: chooseMeal };
+  const suggested = slotForNow();
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.sm, paddingBottom: 24 }}>
@@ -141,6 +146,30 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         </View>
+        {pickMeal && (
+          <View style={{ flexDirection: 'row', gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.md }}>
+            {SLOTS.map((slot) => {
+              const st = SLOT_STYLE[slot];
+              const on = slot === suggested;
+              return (
+                <Pressable
+                  key={slot}
+                  onPress={() => openSlot(slot)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Log ${SLOT_LABEL[slot]}`}
+                  style={({ pressed }) => ({
+                    flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: radius.md,
+                    backgroundColor: on ? colors.cardHi : colors.card, borderWidth: on ? 2 : 0, borderColor: colors.coral,
+                    boxShadow: clay.soft, transform: [{ scale: pressed ? 0.96 : 1 }],
+                  })}
+                >
+                  <IconBadge name={st.icon} color={st.tint.badge} size={30} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', marginTop: 4 }} numberOfLines={1}>{SLOT_LABEL[slot]}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
         <View style={{ height: 10, backgroundColor: '#F7B89C' }} />
       </View>
 
@@ -171,10 +200,15 @@ export default function HomeScreen() {
 
       {/* macros + workout */}
       <View style={{ flexDirection: 'row', gap: space.md, marginBottom: space.md }}>
-        <Card style={{ flex: 1, marginBottom: 0 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: space.sm }}>Macros today</Text>
-          <MacroDonut protein={totals.protein} carbs={totals.carbs} fat={totals.fat} kcal={totals.kcal} />
-        </Card>
+        <Pressable onPress={() => setShowMacros(true)} accessibilityRole="button" accessibilityHint="Opens today’s macros and micronutrients" style={({ pressed }) => ({ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+          <Card style={{ flex: 1, marginBottom: 0 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: space.sm }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', flex: 1 }}>Macros today</Text>
+              <Glyph name="chevron" size={14} color={colors.muted} />
+            </View>
+            <MacroDonut protein={totals.protein} carbs={totals.carbs} fat={totals.fat} kcal={totals.kcal} />
+          </Card>
+        </Pressable>
         <Pressable onPress={() => router.push('/train')} style={{ flex: 1, borderRadius: radius.lg, overflow: 'hidden', boxShadow: clay.tile }}>
           <LinearGradient colors={['#A8DCC9', '#4E9C84']} style={{ flex: 1, padding: space.lg, justifyContent: 'space-between' }}>
             <Text style={{ fontSize: 16, fontWeight: '700', color: '#1F4F40' }}>Today’s workout</Text>
@@ -196,52 +230,6 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* today's meals */}
-      <Card>
-        <SectionLabel action="See All" onAction={() => router.push('/journal')}>Today’s meals</SectionLabel>
-        {SLOTS.map((slot, i) => {
-          const list = s.items.filter((it) => it.slot === slot);
-          const kcal = Math.round(list.reduce((a, it) => a + it.kcal, 0));
-          const st = SLOT_STYLE[slot];
-          const names = list.map((it) => it.name.split(/[,(/]/)[0].trim());
-          return (
-            <View key={slot} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: i ? 1 : 0, borderTopColor: colors.line }}>
-              <View style={{ width: 50, height: 50, borderRadius: 16, backgroundColor: st.tint.bg, alignItems: 'center', justifyContent: 'center', boxShadow: clay.soft }}>
-                <IconBadge name={st.icon} color={st.tint.badge} size={32} />
-              </View>
-              <View style={{ flex: 1, marginHorizontal: space.md }}>
-                <Text style={{ fontSize: 15, fontWeight: '700' }}>{SLOT_LABEL[slot]}</Text>
-                <Text style={type.small} numberOfLines={1}>
-                  {list.length ? `${names.slice(0, 2).join(', ')}${names.length > 2 ? ` +${names.length - 2}` : ''} · ${kcal} kcal` : `Nothing yet · ${Math.round(target * SLOT_SHARE[slot])} kcal budget`}
-                </Text>
-              </View>
-              <RoundButton icon="plus" label={`Add to ${SLOT_LABEL[slot]}`} color={colors.coral} onPress={() => openSlot(slot)} />
-            </View>
-          );
-        })}
-      </Card>
-
-      {/* banner */}
-      <View style={{ backgroundColor: '#A9CDBB', borderRadius: radius.lg, padding: space.md, flexDirection: 'row', alignItems: 'center', boxShadow: clay.tile, marginBottom: space.md }}>
-        <BowlBuddy size={64} id="banner" />
-        <View style={{ flex: 1, marginHorizontal: space.sm }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>{s.menuTotal ? 'Today’s menu is ready ' : 'Plan your mess week '}</Text>
-            <Sparkle size={13} color="#FFE7A8" />
-          </View>
-          <Text style={{ color: '#F3FBF7', fontSize: 12 }}>
-            {s.menuTotal ? `${Object.values(s.menuSlots).reduce((a, b) => a + (b ?? 0), 0)} dishes today · pick Low / Medium / High` : 'Upload your menu once, pick portions daily'}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/menu')}
-          style={({ pressed }) => ({ backgroundColor: colors.teal, borderRadius: radius.pill, paddingHorizontal: 14, height: 36, justifyContent: 'center', boxShadow: clay.buttonTeal, transform: [{ scale: pressed ? 0.96 : 1 }] })}
-        >
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{s.menuTotal ? 'Open' : 'Upload'}</Text>
-        </Pressable>
-      </View>
-
       {s.backupDue && (
         <Pressable onPress={() => router.push('/settings')} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radius.lg, padding: space.md, boxShadow: clay.soft }}>
           <IconBadge name="gear" color={tiles.blue.badge} size={36} accent={tiles.blue.badge} />
@@ -251,6 +239,7 @@ export default function HomeScreen() {
           </View>
         </Pressable>
       )}
+      <MacroSheet visible={showMacros} onClose={() => setShowMacros(false)} items={s.items} profile={profile} />
     </ScrollView>
   );
 }

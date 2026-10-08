@@ -21,10 +21,11 @@ Everything lives in the phone's SQLite database: no account, no cloud, no API ke
   - **Scan meal**, and right under it **Weekly menu**.
   - Shortcuts: "From menu" and "Copy yesterday".
 - **Weekly menu (mess / PG)**:
-  1. Upload a photo of the menu. It is saved on the phone.
-  2. "Open ChatGPT" sends it with ready-made instructions.
-  3. Copy ChatGPT's table and switch back. The dishes load by themselves, one row per day and meal, each with a medium portion.
+  1. "Open ChatGPT" opens it with ready-made instructions. Send it a photo of the menu there.
+  2. ChatGPT lists the week day by day. Correct it until it's right, then say "final".
+  3. Copy ChatGPT's final table and switch back. It loads by itself, and you review it Monday to Sunday before saving.
   - You can edit, add or remove any dish.
+  - "Add to journal" on a meal (or "Add all of today") logs its dishes at medium portions.
 - **Add food**:
   - **Today's menu** is the default when that meal has dishes on the menu. Untick what you skipped and set each dish
     with a **Low · Medium · High** bar (0.5× / 1× / 1.5× of the medium portion).

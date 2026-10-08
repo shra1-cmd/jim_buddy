@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { STARTER_TEMPLATES, exerciseById, makeCustomExercise, setCustomExercises, type Exercise } from '../data/exercises';
 import { todayKey } from '../lib/dates';
-import { stepBaseline, stepsKcal } from '../lib/activity';
+import { stepsKcal } from '../lib/activity';
 import { sessionKcal, suggestLoad, type LogType } from '../lib/training';
 
 const now = () => new Date().toISOString();
@@ -201,6 +201,65 @@ export async function startSession(db: SQLiteDatabase, planId: string | null): P
   return sessionId;
 }
 
+// ---------- day log (no start / stop: sets are saved as they're typed) ----------
+
+/** The plan's log for a date, if anything was logged. */
+export const dayLog = (db: SQLiteDatabase, planId: string, date: string) =>
+  db.getFirstAsync<Session>(
+    "SELECT * FROM workout_session WHERE plan_id = ? AND local_date = ? AND status = 'done' AND kind != 'sport' ORDER BY id LIMIT 1",
+    planId, date,
+  );
+
+async function ensureDayLog(db: SQLiteDatabase, planId: string, date: string): Promise<number> {
+  const found = await dayLog(db, planId, date);
+  if (found) return found.id;
+  const name = (await db.getFirstAsync<{ name: string }>('SELECT name FROM workout_plan WHERE id = ?', planId))?.name ?? 'Workout';
+  const r = await db.runAsync(
+    "INSERT INTO workout_session (plan_id, name, local_date, started_at, ended_at, kcal, status) VALUES (?, ?, ?, ?, ?, 0, 'done')",
+    planId, name, date, now(), now(),
+  );
+  return r.lastInsertRowId;
+}
+
+/** Saves one typed set (insert when new, update otherwise). Returns the set and session ids. */
+export async function saveLoggedSet(
+  db: SQLiteDatabase,
+  o: { id?: number; planId: string; date: string; exerciseId: string; position: number; setNo: number; values: { kg: number | null; reps: number | null; seconds: number | null; distance_m: number | null } },
+): Promise<{ id: number; sessionId: number }> {
+  const sessionId = await ensureDayLog(db, o.planId, o.date);
+  const v = o.values;
+  if (o.id != null) {
+    await db.runAsync('UPDATE set_log SET kg = ?, reps = ?, seconds = ?, distance_m = ?, done = 1, done_at = ? WHERE id = ?', v.kg, v.reps, v.seconds, v.distance_m, now(), o.id);
+    return { id: o.id, sessionId };
+  }
+  const r = await db.runAsync(
+    `INSERT INTO set_log (session_id, exercise_id, position, set_no, kg, reps, seconds, distance_m, done, done_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+    sessionId, o.exerciseId, o.position, o.setNo, v.kg, v.reps, v.seconds, v.distance_m, now(),
+  );
+  return { id: r.lastInsertRowId, sessionId };
+}
+
+/** Removes a logged set; a day log left with no sets is removed too. */
+export async function deleteLoggedSet(db: SQLiteDatabase, id: number) {
+  const row = await db.getFirstAsync<{ session_id: number }>('SELECT session_id FROM set_log WHERE id = ?', id);
+  await db.runAsync('DELETE FROM set_log WHERE id = ?', id);
+  if (!row) return;
+  const left = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM set_log WHERE session_id = ?', row.session_id);
+  if (!left?.n) await db.runAsync('DELETE FROM workout_session WHERE id = ?', row.session_id);
+}
+
+/** Minutes we assume per working set (lift + rest) for the calorie estimate, since time isn't tracked. */
+export const MINUTES_PER_SET = 2.5;
+
+/** Re-estimates a day log's burn from its sets. */
+export async function refreshLogKcal(db: SQLiteDatabase, sessionId: number, weightKg: number) {
+  const sets = await db.getAllAsync<SetRow>('SELECT * FROM set_log WHERE session_id = ?', sessionId);
+  const working = sets.filter((x) => x.done && !x.is_warmup).length;
+  const kcal = sessionKcal(sets, (eid) => exerciseById(eid)?.met ?? 3.5, weightKg, working * MINUTES_PER_SET);
+  await db.runAsync('UPDATE workout_session SET kcal = ?, ended_at = ? WHERE id = ?', kcal, now(), sessionId);
+}
+
 export async function addExerciseToSession(db: SQLiteDatabase, sessionId: number, exerciseId: string) {
   const ex = exerciseById(exerciseId);
   const [lo, hi] = parseReps(ex?.reps ?? '8–12');
@@ -241,6 +300,13 @@ export async function removeExerciseFromSession(db: SQLiteDatabase, sessionId: n
   await db.runAsync('DELETE FROM set_log WHERE session_id = ? AND exercise_id = ?', sessionId, exerciseId);
 }
 
+/** The workout clock starts at the first ticked set, not when the screen was opened. */
+export async function startSessionClock(db: SQLiteDatabase, id: number): Promise<string> {
+  const at = now();
+  await db.runAsync('UPDATE workout_session SET started_at = ? WHERE id = ?', at, id);
+  return at;
+}
+
 export async function finishSession(db: SQLiteDatabase, id: number, weightKg: number): Promise<number> {
   const { session, sets } = await getSession(db, id);
   if (!session) return 0;
@@ -279,17 +345,16 @@ export interface Burn {
 
 /** Everything burned on a day: workouts + games + extra steps (all net of resting). */
 export async function burnBreakdown(db: SQLiteDatabase, date: string): Promise<Burn> {
-  const [w, st, p] = await Promise.all([
+  const [w, st] = await Promise.all([
     db.getAllAsync<{ kind: string; k: number | null }>(
       "SELECT kind, SUM(kcal) AS k FROM workout_session WHERE local_date = ? AND status = 'done' GROUP BY kind", date,
     ),
     db.getFirstAsync<{ steps: number }>('SELECT steps FROM step_day WHERE local_date = ?', date),
-    db.getFirstAsync<{ weight_kg: number; activity: number }>('SELECT weight_kg, activity FROM user_profile WHERE id = 1'),
   ]);
   const workouts = Math.round(w.find((r) => r.kind !== 'sport')?.k ?? 0);
   const sports = Math.round(w.find((r) => r.kind === 'sport')?.k ?? 0);
   const stepCount = st?.steps ?? 0;
-  const steps = p ? stepsKcal(stepCount, p.weight_kg, stepBaseline(p.activity)) : 0;
+  const steps = stepsKcal(stepCount);
   return { workouts, sports, steps, stepCount, total: workouts + sports + steps };
 }
 

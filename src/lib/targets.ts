@@ -50,18 +50,20 @@ export function computeTargets(stats: BodyStats): Targets {
   return { kcal, proteinG, carbsG, fatG, fiberG };
 }
 
-/** Your own numbers: keep calories and protein as typed, split the rest 25% fat / remainder carbs. */
-export function customTargets(kcal: number, proteinG: number): Targets {
-  const k = Math.round(kcal);
-  const p = Math.round(proteinG);
-  const fatG = Math.round((k * 0.25) / 9);
-  const carbsG = Math.max(0, Math.round((k - p * 4 - fatG * 9) / 4));
-  return { kcal: k, proteinG: p, carbsG, fatG, fiberG: Math.round((k / 1000) * 14) };
+/** Calories implied by a macro split (4 / 4 / 9 kcal per g of protein / carbs / fat). */
+export function macroKcal(proteinG: number, carbsG: number, fatG: number): number {
+  return Math.round(proteinG * 4 + carbsG * 4 + fatG * 9);
 }
 
 /** Calories left on the ring: target − eaten + burned × eat-back share. */
 export function caloriesLeft(target: number, eaten: number, burned: number, eatBackPct: number): number {
   return Math.round(target - eaten + burned * (eatBackPct / 100));
+}
+
+/** "+350", "−120" or "0": calories with an explicit sign, using a real minus sign. */
+export function signedKcal(n: number): string {
+  const r = Math.round(n);
+  return r > 0 ? `+${r}` : r < 0 ? `\u2212${-r}` : '0';
 }
 
 /** Net workout kcal from METs (resting 1 MET is already inside the daily target). */

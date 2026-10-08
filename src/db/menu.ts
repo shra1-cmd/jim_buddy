@@ -83,3 +83,11 @@ export async function menuSlotCounts(db: SQLiteDatabase, dow: number): Promise<P
   const rows = await db.getAllAsync<{ slot: Slot; n: number }>('SELECT slot, COUNT(*) AS n FROM menu_item WHERE dow = ? GROUP BY slot', dow);
   return Object.fromEntries(rows.map((r) => [r.slot, r.n]));
 }
+
+/** Menu dishes already logged per meal on a date, so "Add to journal" can warn before doubling up. */
+export async function menuLoggedCounts(db: SQLiteDatabase, date: string): Promise<Partial<Record<Slot, number>>> {
+  const rows = await db.getAllAsync<{ slot: Slot; n: number }>(
+    "SELECT slot, COUNT(*) AS n FROM meal_item WHERE local_date = ? AND source = 'menu' GROUP BY slot", date,
+  );
+  return Object.fromEntries(rows.map((r) => [r.slot, r.n]));
+}

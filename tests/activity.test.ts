@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { sportKcal, stepBaseline, stepsKcal } from '../src/lib/activity.ts';
 
-test('steps only count above the activity baseline', () => {
+test('steps: 100 steps ≈ 3.3 kcal, every step counts', () => {
   assert.equal(stepBaseline(1.2), 5000);
-  assert.equal(stepBaseline(1.375), 7500);
-  assert.equal(stepsKcal(4000, 72, 5000), 0);
-  assert.equal(stepsKcal(10000, 72, 5000), 137); // 5000 × 72 × 0.00038
+  assert.equal(stepsKcal(100), 3);
+  assert.equal(stepsKcal(1000), 33);
+  assert.equal(stepsKcal(10000), 330);
+  assert.equal(stepsKcal(-50), 0);
 });
 
 test('sport kcal is net of resting and capped', () => {

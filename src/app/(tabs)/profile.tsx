@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '../../components/AppText';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { BodyMap } from '../../components/BodyMap';
@@ -11,12 +11,13 @@ import { Button, Card, Chip, RoundButton, SectionLabel, styles as ui } from '../
 import { exerciseById, MUSCLE_LABEL } from '../../data/exercises';
 import { listPhotos, measurementEntries, topLifts } from '../../db/body';
 import { bodyEntries, getProfile, saveWeight, setTargets, type BodyEntry, type Profile } from '../../db/queries';
-import { doneSetsSince, exerciseHistory } from '../../db/training';
+import { doneSetsSince, exerciseHistory, loadCustomExercises } from '../../db/training';
 import { weekStartKey } from '../../lib/balance';
 import { bestE1rm, setsPerMuscle } from '../../lib/training';
+import { targetsPrompt } from '../../lib/chatgpt';
 import { todayKey } from '../../lib/dates';
 import { movingAverage, weeklyRate, type Point } from '../../lib/progress';
-import { GOALS, computeTargets, customTargets } from '../../lib/targets';
+import { ACTIVITY_LEVELS, GOALS, computeTargets, macroKcal, type Targets } from '../../lib/targets';
 import { clay, colors, radius, space, type } from '../../theme';
 
 export default function ProfileScreen() {
@@ -30,24 +31,36 @@ export default function ProfileScreen() {
   const [muscles, setMuscles] = useState<Record<string, number>>({});
   const [side, setSide] = useState<'front' | 'back'>('front');
   const [editing, setEditing] = useState(false);
-  const [kcalText, setKcalText] = useState('');
-  const [proteinText, setProteinText] = useState('');
+  const [draft, setDraft] = useState<Record<keyof Targets, string>>({ kcal: '', proteinG: '', carbsG: '', fatG: '', fiberG: '' });
+  const num = (s: string) => Number(s.replace(',', '.').replace(/[^0-9.]/g, ''));
 
   const openEditor = () => {
     if (!profile) return router.push('/onboarding');
-    setKcalText(String(profile.kcal));
-    setProteinText(String(profile.proteinG));
+    setDraft({ kcal: String(profile.kcal), proteinG: String(profile.proteinG), carbsG: String(profile.carbsG), fatG: String(profile.fatG), fiberG: String(profile.fiberG) });
     setEditing(true);
   };
 
   const saveTargets = async () => {
-    const k = Number(kcalText.replace(/[^0-9.]/g, ''));
-    const pr = Number(proteinText.replace(/[^0-9.]/g, ''));
-    if (!(k >= 1000 && k <= 6000)) return Alert.alert('Check calories', 'Enter a daily number between 1000 and 6000, e.g. 1950.');
-    if (!(pr >= 30 && pr <= 400) || pr * 4 > k * 0.6) return Alert.alert('Check protein', 'Enter grams per day, e.g. 140 (at most 60% of your calories).');
-    await setTargets(db, customTargets(k, pr));
+    const t: Targets = { kcal: num(draft.kcal), proteinG: num(draft.proteinG), carbsG: num(draft.carbsG), fatG: num(draft.fatG), fiberG: num(draft.fiberG) };
+    if (!(t.kcal >= 1000 && t.kcal <= 6000)) return Alert.alert('Check calories', 'Enter a daily number between 1000 and 6000, e.g. 1950.');
+    if (!(t.proteinG >= 30 && t.proteinG <= 400)) return Alert.alert('Check protein', 'Enter grams per day, e.g. 140.');
+    if (!(t.carbsG >= 0 && t.carbsG <= 900)) return Alert.alert('Check carbs', 'Enter grams per day, e.g. 220.');
+    if (!(t.fatG >= 15 && t.fatG <= 300)) return Alert.alert('Check fat', 'Enter grams per day, e.g. 55.');
+    if (!(t.fiberG >= 0 && t.fiberG <= 100)) return Alert.alert('Check fiber', 'Enter grams per day, e.g. 28.');
+    const rounded = Object.fromEntries(Object.entries(t).map(([k, v]) => [k, Math.round(v)])) as unknown as Targets;
+    await setTargets(db, rounded);
     setEditing(false);
     load();
+  };
+
+  const askChatGpt = async () => {
+    if (!profile) return;
+    const prompt = targetsPrompt({
+      sex: profile.sex, age: profile.age, heightCm: profile.heightCm, weightKg: profile.weightKg,
+      activity: ACTIVITY_LEVELS.find((a) => a.value === profile.activity)?.label ?? 'desk job',
+      goal: GOALS.find((g) => g.value === profile.goal)?.label ?? 'maintain',
+    });
+    await Linking.openURL(`https://chatgpt.com/?q=${encodeURIComponent(prompt)}`).catch(() => Alert.alert('Couldn’t open ChatGPT', 'Open the ChatGPT app and ask there.'));
   };
 
   const resetTargets = async () => {
@@ -61,6 +74,7 @@ export default function ProfileScreen() {
     const [p, e, m, ph, top, weekSets] = await Promise.all([
       getProfile(db), bodyEntries(db, 90), measurementEntries(db, 60), listPhotos(db), topLifts(db, 4),
       doneSetsSince(db, weekStartKey(new Date())),
+      loadCustomExercises(db), // so sets of your own exercises count on the muscle map
     ]);
     setProfile(p);
     setEntries(e);
@@ -133,18 +147,26 @@ export default function ProfileScreen() {
         <Card style={{ borderColor: colors.coral, borderWidth: 2 }}>
           <Text style={[type.h2, { marginBottom: space.md }]}>Daily targets</Text>
           <View style={{ flexDirection: 'row', gap: space.md }}>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.label, { marginBottom: 4 }]}>CALORIES (KCAL)</Text>
-              <TextInput value={kcalText} onChangeText={setKcalText} keyboardType="number-pad" autoFocus selectTextOnFocus style={[ui.input, { fontSize: 20, fontWeight: '800' }]} accessibilityLabel="Daily calories" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.label, { marginBottom: 4 }]}>PROTEIN (G)</Text>
-              <TextInput value={proteinText} onChangeText={setProteinText} keyboardType="number-pad" selectTextOnFocus style={[ui.input, { fontSize: 20, fontWeight: '800' }]} accessibilityLabel="Daily protein in grams" />
-            </View>
+            <TargetField label="CALORIES (KCAL)" value={draft.kcal} onChange={(v) => setDraft({ ...draft, kcal: v })} autoFocus big />
+            <TargetField label="PROTEIN (G)" value={draft.proteinG} onChange={(v) => setDraft({ ...draft, proteinG: v })} big />
           </View>
-          <Text style={[type.small, { marginVertical: space.sm }]}>
-            Carbs, fat and fiber follow from these (fat 25% of calories, carbs the rest). Suggested for you: {computeTargets(profile).kcal} kcal · {computeTargets(profile).proteinG} g.
-          </Text>
+          <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.sm }}>
+            <TargetField label="CARBS (G)" value={draft.carbsG} onChange={(v) => setDraft({ ...draft, carbsG: v })} />
+            <TargetField label="FAT (G)" value={draft.fatG} onChange={(v) => setDraft({ ...draft, fatG: v })} />
+            <TargetField label="FIBER (G)" value={draft.fiberG} onChange={(v) => setDraft({ ...draft, fiberG: v })} />
+          </View>
+          {(() => {
+            const fromMacros = macroKcal(num(draft.proteinG), num(draft.carbsG), num(draft.fatG));
+            const off = Math.abs(fromMacros - num(draft.kcal)) > Math.max(100, num(draft.kcal) * 0.1);
+            return (
+              <Text style={[type.small, { marginTop: space.sm, color: off ? colors.danger : colors.muted }]}>
+                Protein + carbs + fat = {fromMacros} kcal{off ? ' (far from your calorie target)' : ''}. Suggested for you: {computeTargets(profile).kcal} kcal · P {computeTargets(profile).proteinG} · C {computeTargets(profile).carbsG} · F {computeTargets(profile).fatG} · fiber {computeTargets(profile).fiberG} g.
+              </Text>
+            );
+          })()}
+          <Pressable onPress={askChatGpt} accessibilityRole="link" style={{ marginVertical: space.sm }}>
+            <Text style={{ color: colors.tealDeep, fontWeight: '700' }}>💬 Chat with ChatGPT for targets that suit your body ›</Text>
+          </Pressable>
           <View style={{ flexDirection: 'row', gap: space.sm }}>
             <Button title="Save" onPress={saveTargets} style={{ flex: 1 }} />
             <Button title="Use suggested" variant="ghost" onPress={resetTargets} style={{ flex: 1 }} />
@@ -228,6 +250,15 @@ export default function ProfileScreen() {
         )}
       </Card>
     </ScrollView>
+  );
+}
+
+function TargetField({ label, value, onChange, autoFocus, big }: { label: string; value: string; onChange: (v: string) => void; autoFocus?: boolean; big?: boolean }) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Text style={[type.label, { marginBottom: 4 }]} numberOfLines={1}>{label}</Text>
+      <TextInput value={value} onChangeText={onChange} keyboardType="number-pad" autoFocus={autoFocus} selectTextOnFocus style={[ui.input, { fontSize: big ? 20 : 17, fontWeight: '800' }]} accessibilityLabel={label.toLowerCase()} />
+    </View>
   );
 }
 
