@@ -10,22 +10,26 @@ const ALL: Slug[] = [
 const QUIET = '#E7DFD2';
 const SKIN = '#D9CDBB';
 
-/** levels: slug → 1 (secondary) or 2 (primary). */
+/** levels: slug → 1 (secondary) or 2 (primary). `fills` overrides the coral [secondary, primary] highlight. */
 export function BodyMap({
   levels,
   side,
   scale = 1,
+  gender = 'male',
+  fills = [colors.amberSoft, colors.amber],
   onPress,
 }: {
   levels: Partial<Record<string, 1 | 2>>;
   side: 'front' | 'back';
   scale?: number;
+  gender?: 'male' | 'female';
+  fills?: [string, string];
   onPress?: (slug: string) => void;
 }) {
   const data: ExtendedBodyPart[] = ALL.map((slug) => {
     const lvl = levels[slug];
-    if (lvl === 2) return { slug, styles: { fill: colors.amber } };
-    if (lvl === 1) return { slug, styles: { fill: colors.amberSoft } };
+    if (lvl === 2) return { slug, styles: { fill: fills[1] } };
+    if (lvl === 1) return { slug, styles: { fill: fills[0] } };
     const fill = ['hands', 'feet', 'knees', 'ankles', 'head', 'neck', 'hair'].includes(slug) ? SKIN : QUIET;
     return { slug, styles: { fill } };
   });
@@ -34,6 +38,7 @@ export function BodyMap({
       data={data}
       side={side}
       scale={scale}
+      gender={gender}
       border={colors.steelLight}
       defaultFill={QUIET}
       onBodyPartPress={onPress ? (part) => part.slug && onPress(part.slug) : undefined}

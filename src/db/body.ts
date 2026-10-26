@@ -1,19 +1,12 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { deleteImage } from '../lib/images';
+import { MEASURES, type MeasureKey, type Measurement } from '../lib/measures';
 
 const now = () => new Date().toISOString();
 
 // ---------- measurements ----------
 
-export const MEASURES = [
-  { key: 'waist_cm', label: 'Waist', hint: 'At the navel, relaxed' },
-  { key: 'chest_cm', label: 'Chest', hint: 'Nipple line, arms down' },
-  { key: 'arm_cm', label: 'Arm', hint: 'Flexed, widest point' },
-  { key: 'thigh_cm', label: 'Thigh', hint: 'Widest point, standing' },
-] as const;
-export type MeasureKey = (typeof MEASURES)[number]['key'];
-
-export type Measurement = { local_date: string } & Record<MeasureKey, number | null>;
+export { MEASURES, type MeasureKey, type Measurement };
 
 /** Upserts only the fields given; weight on the same day stays untouched. */
 export async function saveMeasurements(db: SQLiteDatabase, date: string, m: Partial<Record<MeasureKey, number>>) {
@@ -27,9 +20,10 @@ export async function saveMeasurements(db: SQLiteDatabase, date: string, m: Part
 }
 
 export async function measurementEntries(db: SQLiteDatabase, limit = 60): Promise<Measurement[]> {
+  const keys = MEASURES.map((m) => m.key);
   return db.getAllAsync<Measurement>(
-    `SELECT local_date, waist_cm, chest_cm, arm_cm, thigh_cm FROM body_entry
-     WHERE waist_cm IS NOT NULL OR chest_cm IS NOT NULL OR arm_cm IS NOT NULL OR thigh_cm IS NOT NULL
+    `SELECT local_date, ${keys.join(', ')} FROM body_entry
+     WHERE ${keys.map((k) => `${k} IS NOT NULL`).join(' OR ')}
      ORDER BY local_date DESC LIMIT ?`,
     limit,
   );

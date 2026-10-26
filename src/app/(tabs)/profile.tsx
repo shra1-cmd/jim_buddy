@@ -5,17 +5,19 @@ import { Alert, Linking, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from '../../components/AppText';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { BodyMap } from '../../components/BodyMap';
+import { BodyProfileCard } from '../../components/BodyProfile';
 import { MiniLine } from '../../components/MiniLine';
 import { Mascot } from '../../components/Illustrations';
 import { Button, Card, Chip, RoundButton, SectionLabel, styles as ui } from '../../components/ui';
 import { exerciseById, MUSCLE_LABEL } from '../../data/exercises';
-import { listPhotos, measurementEntries, topLifts } from '../../db/body';
+import { listPhotos, measurementEntries, topLifts, type Measurement } from '../../db/body';
 import { bodyEntries, getProfile, saveWeight, setTargets, type BodyEntry, type Profile } from '../../db/queries';
 import { doneSetsSince, exerciseHistory, loadCustomExercises } from '../../db/training';
 import { weekStartKey } from '../../lib/balance';
 import { bestE1rm, setsPerMuscle } from '../../lib/training';
 import { targetsPrompt } from '../../lib/chatgpt';
 import { todayKey } from '../../lib/dates';
+import { bodyProfile } from '../../lib/measures';
 import { movingAverage, weeklyRate, type Point } from '../../lib/progress';
 import { ACTIVITY_LEVELS, GOALS, computeTargets, macroKcal, type Targets } from '../../lib/targets';
 import { clay, colors, radius, space, type } from '../../theme';
@@ -30,6 +32,8 @@ export default function ProfileScreen() {
   const [lifts, setLifts] = useState<{ id: string; name: string; points: Point[] }[]>([]);
   const [muscles, setMuscles] = useState<Record<string, number>>({});
   const [side, setSide] = useState<'front' | 'back'>('front');
+  const [measures, setMeasures] = useState<Measurement[]>([]);
+  const [showBody, setShowBody] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<keyof Targets, string>>({ kcal: '', proteinG: '', carbsG: '', fatG: '', fiberG: '' });
   const num = (s: string) => Number(s.replace(',', '.').replace(/[^0-9.]/g, ''));
@@ -79,6 +83,7 @@ export default function ProfileScreen() {
     setProfile(p);
     setEntries(e);
     const w = m.filter((r) => r.waist_cm != null);
+    setMeasures(m);
     setWaist(w.length ? { last: w[0].waist_cm!, change: w.length > 1 ? Math.round((w[0].waist_cm! - w[w.length - 1].waist_cm!) * 10) / 10 : null } : null);
     setPhotoCount(ph.length);
     setMuscles(setsPerMuscle(weekSets, (id) => exerciseById(id)));
@@ -109,6 +114,10 @@ export default function ProfileScreen() {
   const smooth = useMemo(() => movingAverage(points, 7), [points]);
   const rate = weeklyRate(smooth);
   const latestAvg = smooth.length ? smooth[smooth.length - 1].value : null;
+  const body = useMemo(
+    () => bodyProfile(measures, profile?.heightCm ?? null, points.length ? points[0].value : profile?.weightKg ?? null, profile?.sex ?? 'male'),
+    [measures, profile, points],
+  );
 
   const logWeight = async () => {
     const w = Number(weight.replace(',', '.'));
@@ -247,6 +256,21 @@ export default function ProfileScreen() {
             {Object.entries(muscles).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${MUSCLE_LABEL[k] ?? k} ${v}`).join(' · ')}
             {'\n'}Hard sets since Monday (secondary muscles count half). Solid coral = 10+, a good weekly dose for growth.
           </Text>
+        )}
+      </Card>
+
+      <SectionLabel>Body profile</SectionLabel>
+      <Card>
+        <Button
+          title={showBody ? 'Hide body profile' : 'Body profile'}
+          icon="person"
+          variant={showBody ? 'ghost' : 'secondary'}
+          onPress={() => setShowBody(!showBody)}
+        />
+        {showBody && (
+          <View style={{ marginTop: space.md }}>
+            <BodyProfileCard p={body} sex={profile?.sex ?? 'male'} avgWeight={latestAvg} photoCount={photoCount} />
+          </View>
         )}
       </Card>
     </ScrollView>

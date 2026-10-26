@@ -14,7 +14,7 @@ type SeedFood = {
   ug: number | null;
 };
 
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 5;
 
 /** Runs on app start (SQLiteProvider onInit). Versioned with PRAGMA user_version. */
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
@@ -206,6 +206,31 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
       DROP TABLE IF EXISTS scan_queue;
     `);
     version = 4;
+  }
+
+  if (version === 4) {
+    // v5: full body profile. arm_cm / thigh_cm keep their history as the right-side biceps and thigh.
+    await db.execAsync(`
+      ALTER TABLE body_entry ADD COLUMN neck_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN shoulder_width_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN shoulder_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN natural_waist_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN abdomen_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN hips_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN biceps_l_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN upper_arm_l_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN upper_arm_r_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN forearm_l_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN forearm_r_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN wrist_l_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN wrist_r_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN thigh_l_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN calf_l_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN calf_r_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN inseam_cm REAL;
+      ALTER TABLE body_entry ADD COLUMN body_fat_pct REAL;
+    `);
+    version = 5;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
