@@ -23,10 +23,12 @@
 - [x] Home: "Log a meal" in the top box now opens a row of four meal buttons (Breakfast/Lunch/Snacks/Dinner, with the current meal outlined) instead of jumping to dinner. Tapping "Macros today" opens `components/MacroSheet.tsx`, a bottom sheet with macros vs targets, a by-meal breakdown, and a micronutrients list from `data/micros.ts` (approx. ICMR-NIN 2020 targets with Indian food sources). Micros are not tracked, because foods only have kcal/P/C/F/fiber. The menu banner copy no longer says "Upload".
 - [x] Steps: `stepsKcal(steps)` = steps × 0.033, i.e. 100 steps ≈ 3.3 kcal. Every step counts and there is no activity baseline anymore. The step bar goal is 10,000.
 - [x] Home: removed the "Today's meals" card and the "Plan your mess week" banner.
-- [x] 2026-10-09: published via `eas update` to branch `main` with runtime exposdk:57.0.0, group `edd4286f-c84c-458b-8102-e9afdc4f3c0e`. It shows in Expo Go as @shravs143/jimbuddy. Nothing is git-committed yet.
+- [x] 2026-10-09: committed as `7875b4e` on master (there is no git remote) and published via `eas update` to branch `main` with runtime exposdk:57.0.0, group `1e621846-859b-4995-a6f4-8a2c956412ca`. It shows in Expo Go as @shravs143/jimbuddy.
 - [ ] The user's last message was cut off at "...but why it is and plan your mess". Ask what they wanted about the "Plan your mess week" banner.
 - [ ] `/workout/[id]` still exists for History views and any legacy active session; it still has its own copy of the draft helpers (could switch to `lib/setFields`).
 - [ ] Seesaw not yet seen on a device: the web preview hangs on the expo-sqlite loader.
+
+- [x] 2026-10-26: upgraded to **SDK 58** (expo 58.0.19, RN 0.88.0, React 19.3.0). Committed on master; the update on the `main` branch is still on SDK 57. Code changes: removed `initialRouteName` from the tabs layout because SDK 58 dropped it. `ClayTabBar` now uses `emitter` + `navigateToTab(route.key)`, since the tab bar no longer gets a `navigation` prop. `AppText` refs use `ComponentRef<typeof …>`. The `AndroidImportance` line in `restTimer.ts` has an eslint-disable for an import/namespace false positive. Lockfile regenerated, because a stale nested expo-symbols@57 blocked `expo install --fix`.
 
 ## Open threads
 - Earlier the user wanted the online EAS project removed. On 2026-10-09 they asked to deploy it again, so it is live on branch `main`.

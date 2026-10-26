@@ -7,7 +7,7 @@ import { Glyph, type GlyphName } from './Glyphs';
 const ICONS: Record<string, GlyphName> = { home: 'home', journal: 'book', train: 'dumbbell', profile: 'person' };
 
 /** Mint "sidebar" from the reference, laid out as a floating bottom bar. The active tab sits on a raised cream pill. */
-export function ClayTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
+export function ClayTabBar({ state, descriptors, emitter, navigateToTab, insets }: BottomTabBarProps) {
   return (
     <View style={{ backgroundColor: colors.bg, paddingHorizontal: 12, paddingTop: 6, paddingBottom: Math.max(insets.bottom, 10) }}>
       <View style={{ flexDirection: 'row', backgroundColor: colors.mint, borderRadius: radius.xl, padding: 6, boxShadow: clay.tabBar }}>
@@ -16,8 +16,8 @@ export function ClayTabBar({ state, descriptors, navigation, insets }: BottomTab
           const { options } = descriptors[route.key];
           const label = typeof options.title === 'string' ? options.title : route.name;
           const onPress = () => {
-            const e = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-            if (!focused && !e.defaultPrevented) navigation.navigate(route.name, route.params);
+            const e = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+            if (!focused && !e.defaultPrevented) navigateToTab(route.key);
           };
           return (
             <Pressable

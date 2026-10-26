@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, type ComponentRef } from 'react';
 import {
   Platform, StyleSheet, Text as RNText, TextInput as RNTextInput,
   type TextInputProps, type TextProps, type TextStyle,
@@ -22,10 +22,10 @@ function withFont(style: TextProps['style']) {
   return [{ color: colors.ink }, style, { fontFamily: family(flat.fontWeight), fontWeight: Platform.OS === 'web' ? undefined : ('normal' as const) }];
 }
 
-export const Text = forwardRef<RNText, TextProps>(function Text({ style, ...rest }, ref) {
+export const Text = forwardRef<ComponentRef<typeof RNText>, TextProps>(function Text({ style, ...rest }, ref) {
   return <RNText ref={ref} {...rest} style={withFont(style)} />;
 });
 
-export const TextInput = forwardRef<RNTextInput, TextInputProps>(function TextInput({ style, ...rest }, ref) {
+export const TextInput = forwardRef<ComponentRef<typeof RNTextInput>, TextInputProps>(function TextInput({ style, ...rest }, ref) {
   return <RNTextInput ref={ref} placeholderTextColor={colors.muted} {...rest} style={withFont(style)} />;
 });

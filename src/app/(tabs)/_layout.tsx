@@ -5,7 +5,6 @@ import { colors, fonts } from '../../theme';
 export default function TabsLayout() {
   return (
     <Tabs
-      initialRouteName="home"
       tabBar={(props) => <ClayTabBar {...props} />}
       screenOptions={{
         headerShadowVisible: false,

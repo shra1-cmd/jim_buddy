@@ -22,6 +22,7 @@ export async function ensureTimerPermission(): Promise<boolean> {
     if (Platform.OS === 'android' && !channelReady) {
       await Notifications.setNotificationChannelAsync(CHANNEL, {
         name: 'Rest timer',
+        // eslint-disable-next-line import/namespace -- exported at runtime; the import plugin can't parse SDK 58's enum build output
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 300, 150, 300],
         sound: 'default',
