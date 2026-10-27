@@ -57,6 +57,7 @@ export default function RootLayout() {
         >
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="welcome" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ title: 'Your targets' }} />
           <Stack.Screen name="add-food" options={{ presentation: 'modal', title: 'Add food' }} />
           <Stack.Screen name="scan" options={{ title: 'Scan meal' }} />

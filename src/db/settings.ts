@@ -1,6 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-export type SettingKey = 'last_backup_at' | 'menu_photo';
+export type SettingKey =
+  | 'last_backup_at' | 'menu_photo'
+  | 'welcome_seen_at' | 'first_open_at'
+  | 'feedback_sent_at' | 'feedback_rating' | 'feedback_asks' | 'feedback_snooze_until';
 
 export async function getSetting(db: SQLiteDatabase, key: SettingKey): Promise<string | null> {
   const r = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', key);

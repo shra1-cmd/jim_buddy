@@ -33,7 +33,13 @@
 - [x] 2026-10-26: `eas update` → branch `main`, runtime exposdk:58.0.0, group `bb0720b4-cb20-4b56-a5c6-48e3bf1dd729` (needs `--environment production` in non-interactive mode).
 - [x] 2026-10-26: pushed to https://github.com/shra1-cmd/jim_buddy (PUBLIC). Local branch renamed master → main, tracking origin/main. GitHub's initial commit was merged with `-s ours`, keeping the project's README/LICENSE. LICENSE is still Expo's template MIT ("650 Industries"); the user may want their own.
 
+- [x] 2026-10-26: **Android release setup.** app.json drops the duplicated RECORD_AUDIO, sets image-picker `microphonePermission: false`, and adds `blockedPermissions` RECORD_AUDIO + SYSTEM_ALERT_WINDOW. Storage permissions are kept because `requestMediaLibraryPermissionsAsync` needs them on Android ≤12. eas.json: production builds an `app-bundle`, and submit goes to the `internal` track as a draft. Added `PRIVACY.md`, which Play needs as a URL. EAS generated the keystore in the cloud and shares it across the preview and production profiles. Package `com.jimbuddy.app` was not on Play (404) and is permanent once uploaded. Builds: preview APK `1ffcddb1-5a33-438e-aa21-aec4d2bfd9a3`, production AAB `25ac5e85-9a17-4655-b5ff-c19e93da4fc5`.
+
+- [x] 2026-10-27: **Welcome note + feedback prompt** (uncommitted). `/welcome` is a letter from Shravan, shown once (setting `welcome_seen_at`; existing users see it once too), and it can be reopened from Settings → "Read the welcome note". `FeedbackSheet` offers Really useful / Good initiative / Not really interesting plus an optional note. The message starts "Hi Shravan, I'm <name> 👋" and goes out via the RN `Share` sheet, since there's no backend and a phone number or email in the public repo would leak. Home asks once per launch when `lib/feedback.shouldAskFeedback` holds: ≥3 days since `first_open_at`, ≥3 distinct days with a meal or a finished workout, not yet sent, fewer than 2 asks, snooze over. "Maybe later" or a backdrop tap snoozes 5 days. Settings → "Send feedback" is always available. Not yet seen on a device.
+
 ## Open threads
+- **The user doesn't want to pay for anything (2026-10-26):** they just want an APK to sideload and share, so skip the Play Store ($25 fee). Make new APKs with `npx eas-cli build -p android --profile preview` (free tier).
+- (Parked) Play Store: the first AAB upload must be done by hand in Play Console. `eas submit` needs a Google service-account JSON, and that can only be used after the first manual upload. The privacy policy URL needs PRIVACY.md pushed to GitHub.
 - Earlier the user wanted the online EAS project removed. On 2026-10-09 they asked to deploy it again, so it is live on branch `main`.
 - Uncommitted config changes:
   - `expo-updates` was added.

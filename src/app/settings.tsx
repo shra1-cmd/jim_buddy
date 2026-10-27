@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { Text } from '../components/AppText';
+import { FeedbackSheet } from '../components/FeedbackSheet';
 import { Button, Card, Chip, IconBadge, SectionLabel } from '../components/ui';
 import { getProfile, setEatBack } from '../db/queries';
 import { getSetting, setSetting } from '../db/settings';
@@ -13,11 +14,15 @@ export default function Settings() {
   const db = useSQLiteContext();
   const [eatBack, setEb] = useState(50);
   const [lastBackup, setLastBackup] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [feedback, setFeedback] = useState(false);
 
   useEffect(() => {
     (async () => {
       setLastBackup(await getSetting(db, 'last_backup_at'));
-      setEb((await getProfile(db))?.eatBackPct ?? 50);
+      const p = await getProfile(db);
+      setEb(p?.eatBackPct ?? 50);
+      setName(p?.name ?? '');
     })();
   }, [db]);
 
@@ -82,12 +87,20 @@ export default function Settings() {
         <Button title="Restore from file" variant="ghost" onPress={restore} />
       </Card>
 
+      <SectionLabel>From the maker</SectionLabel>
+      <Card>
+        <Text style={[type.small, { marginBottom: space.md }]}>Tell Shravan what’s working and what isn’t. It goes through WhatsApp, email or any app you pick.</Text>
+        <Button title="Send feedback" variant="secondary" onPress={() => setFeedback(true)} style={{ marginBottom: space.sm }} />
+        <Button title="Read the welcome note" variant="ghost" onPress={() => router.push({ pathname: '/welcome', params: { again: '1' } })} />
+      </Card>
+
       <SectionLabel>Credits</SectionLabel>
       <Text style={type.small}>
         Food data: Indian Nutrient Databank (INDB), CC BY, built on ICMR-NIN food composition tables. Basic foods use typical values.
         {'\n'}Exercise drawings: adapted from Everkinetic, CC BY-SA 4.0.
         {'\n'}Body map: react-native-body-highlighter (MIT). Font: Nunito (OFL).
       </Text>
+      <FeedbackSheet visible={feedback} name={name} onClose={() => setFeedback(false)} />
     </ScrollView>
   );
 }

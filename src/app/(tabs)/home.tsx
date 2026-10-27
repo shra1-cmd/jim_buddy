@@ -1,16 +1,18 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '../../components/AppText';
 import { MacroDonut, WeekBars } from '../../components/Charts';
 import { Glyph } from '../../components/Glyphs';
+import { FeedbackSheet } from '../../components/FeedbackSheet';
 import { DumbbellArt, Mascot, Plant } from '../../components/Illustrations';
 import { MacroSheet } from '../../components/MacroSheet';
 import { Card, IconBadge, Pill, RoundButton, StatTile } from '../../components/ui';
 import { syncPhoneSteps } from '../../db/activity';
+import { feedbackDue, snoozeFeedback } from '../../db/feedback';
 import { loggedDays } from '../../db/body';
 import { menuSlotCounts } from '../../db/menu';
 import {
@@ -53,6 +55,8 @@ export default function HomeScreen() {
   const [metric, setMetric] = useState<'kcal' | 'protein'>('kcal');
   const [pickMeal, setPickMeal] = useState(false);
   const [showMacros, setShowMacros] = useState(false);
+  const [askFeedback, setAskFeedback] = useState(false);
+  const feedbackChecked = useRef(false);
   const today = todayKey();
   const monday = weekStartKey(fromKey(today));
   const dow = dowOfKey(today);
@@ -78,6 +82,17 @@ export default function HomeScreen() {
   }, [db, today, monday, dow]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Ask for feedback once the app has had real use (see lib/feedback). Checked once per launch, after a beat.
+  useEffect(() => {
+    if (feedbackChecked.current) return;
+    feedbackChecked.current = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    feedbackDue(db, today).then((due) => {
+      if (due) timer = setTimeout(() => setAskFeedback(true), 1500);
+    });
+    return () => clearTimeout(timer);
+  }, [db, today]);
 
   if (!s) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
 
@@ -240,6 +255,14 @@ export default function HomeScreen() {
         </Pressable>
       )}
       <MacroSheet visible={showMacros} onClose={() => setShowMacros(false)} items={s.items} profile={profile} />
+      <FeedbackSheet
+        visible={askFeedback}
+        name={profile?.name ?? ''}
+        onClose={(sent) => {
+          setAskFeedback(false);
+          if (!sent) snoozeFeedback(db, today);
+        }}
+      />
     </ScrollView>
   );
 }

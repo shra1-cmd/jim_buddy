@@ -18,9 +18,9 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": [
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "web": {
@@ -44,7 +44,8 @@
         "expo-image-picker",
         {
           "photosPermission": "JimBuddy uses your photos to estimate meals and keep progress photos.",
-          "cameraPermission": "JimBuddy uses the camera to scan meals, food labels and progress photos."
+          "cameraPermission": "JimBuddy uses the camera to scan meals, food labels and progress photos.",
+          "microphonePermission": false
         }
       ],
       [
