@@ -50,10 +50,10 @@ export default function Welcome() {
         </View>
         <Text style={{ fontSize: 20, fontWeight: '800', marginBottom: space.md }}>Hi, I’m Shravan 👋</Text>
         <Text style={[type.body, { lineHeight: 23, color: colors.inkSoft }]}>
-          I made JimBuddy to know you deeply: what you eat, how you train, and how your body changes week by week.
+          JimBuddy is here to help you understand yourself better — from what you eat and how you train to how your body grows and changes over time.
         </Text>
         <Text style={[type.body, { lineHeight: 23, color: colors.inkSoft, marginTop: space.md }]}>
-          Stay with this journey. It will definitely help you understand yourself, your food, your strength and your habits, more wisely.
+          Every meal, every workout, every small habit tells a story. Stay consistent, track your progress, and discover what truly works for your body — one day at a time.
         </Text>
         <Text style={{ marginTop: space.lg, fontSize: 16, fontWeight: '800', color: colors.coralDeep, textAlign: 'right' }}>— Shravan</Text>
       </View>
