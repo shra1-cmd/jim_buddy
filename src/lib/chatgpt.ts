@@ -19,15 +19,20 @@ export interface MenuRow extends EstimatedItem {
 
 // ---------- prompts ----------
 
+export const MEAL_COLUMNS = 'item | grams | kcal | protein | carbs | fat | fiber';
+export const MEAL_EXAMPLE = 'Rolled oats | 80 | 311 | 13.5 | 53 | 5.5 | 8.1';
+
 export function mealPrompt(o: { slot: string; place?: string; hint?: string }): string {
   const where = o.place ? ` (${o.place.toLowerCase()} food)` : '';
   const extra = o.hint?.trim() ? `\nContext: ${o.hint.trim()}.` : '';
   return `You are a careful nutrition estimator who knows Indian home, mess and restaurant food well.
 Look at the photo I'm sending of my ${o.slot}${where}. List every separate food you can see and estimate each portion in grams.${extra}
 Then give the nutrition for that portion (not per 100 g).
-Reply ONLY with a table in exactly this format, one food per line, no other text:
-item | grams | kcal | protein | carbs | fat | fiber
-Use plain numbers (no units). If the food looks oily, add cooking oil/ghee as its own line.`;
+Reply with ONLY a code block (inside \`\`\`) holding this table, one food per line, no other text:
+${MEAL_COLUMNS}
+Example line: ${MEAL_EXAMPLE}
+Rules: exactly 7 parts per line, plain numbers with no units, a dot for decimals, no commas inside numbers, no Total row.
+Count cooking oil/ghee inside each dish's numbers; don't list it as a separate line.`;
 }
 
 export function menuPrompt(): string {
@@ -38,10 +43,11 @@ STEP 1 – Read the photo and list everything day by day (Monday to Sunday), gro
 Split combos into separate dishes ("Rice, Dal, Curd" → 3 dishes). Then ask me if anything is wrong or missing, and wait.
 I may change dishes or skip meals I don't eat; keep updating the list until I say "final".
 
-STEP 2 – When I say "final", reply ONLY with this table, one dish per line, no other text:
+STEP 2 – When I say "final", reply with ONLY a code block (inside \`\`\`) holding this table, one dish per line, no other text:
 day | meal | item | grams | kcal | protein | carbs | fat | fiber
 day = Mon, Tue, Wed, Thu, Fri, Sat, Sun or Daily (served every day) · meal = breakfast, lunch, snacks or dinner.
-grams = a typical MEDIUM serving at an Indian mess; nutrition is for that serving (not per 100 g). Plain numbers only.`;
+grams = a typical MEDIUM serving at an Indian mess; nutrition is for that serving (not per 100 g).
+Plain numbers with no units, a dot for decimals, no commas inside numbers, no Total rows. Count cooking oil/ghee inside each dish.`;
 }
 
 /** Asks ChatGPT for daily targets that fit the user's body and goal. */
@@ -54,55 +60,129 @@ kcal | protein g | carbs g | fat g | fiber g`;
 }
 
 // ---------- parsing ----------
+// ChatGPT's reply reaches the clipboard in several shapes: markdown pipes (Copy button, code block),
+// tab-separated cells (copying the rendered table), or one cell per line (selecting text on Android).
 
-const num = (s: string | undefined): number => {
-  const m = (s ?? '').replace(',', '.').match(/-?\d+(\.\d+)?/);
+export interface RowError {
+  line: number; // 1-based line in the pasted text
+  text: string;
+  reason: string;
+}
+
+const FIELDS = ['grams', 'kcal', 'protein', 'carbs', 'fat', 'fiber'] as const;
+const LINE_BREAK = /\r\n|[\r\n\u0085\u2028\u2029]/;
+
+/** "80", "7.5", "6,4", "1,050", "~120", "80 g" → number; NaN when the cell holds no number. */
+export function toNumber(s: string | undefined): number {
+  let t = (s ?? '').trim();
+  t = /\d{1,3}(,\d{3})+(?!\d)/.test(t) && !/\d,\d{1,2}(?!\d)/.test(t) ? t.replace(/,/g, '') : t.replace(/(\d),(\d)/, '$1.$2');
+  const m = t.match(/-?\d+(\.\d+)?/);
   return m ? Number(m[0]) : NaN;
-};
+}
+
+const isNumberCell = (s: string) => /^[~≈]?\s*-?\d[\d.,]*\s*(g|gm|grams?|ml|kcal|cal)?$/i.test(s.trim());
+const isDash = (s: string) => /^[-–—]$/.test(s.trim());
+const clean = (s: string) => s.replace(/\*\*|__|`/g, '').replace(/ /g, ' ').trim();
 
 function cells(raw: string): string[] | null {
-  const line = raw.trim().replace(/^\|/, '').replace(/\|$/, '');
-  if (!line.includes('|')) return null;
-  return line.split('|').map((c) => c.trim().replace(/\*\*/g, ''));
+  let line = clean(raw.replace(/[│┃｜¦]/g, '|'));
+  if (!line.includes('|')) {
+    if (!line.includes('\t')) return null;
+    line = line.replace(/\t/g, '|');
+  }
+  line = line.replace(/^\|/, '').replace(/\|$/, '');
+  return line.split('|').map(clean);
 }
 
 const isRule = (s: string) => /^[-:\s]*$/.test(s);
 const isHeaderWord = (s: string) => /^(item|food|dish|total|day|meal)s?$/i.test(s.trim());
+const isTotal = (s: string) => /^(grand\s+)?(total|sum|overall)\b/i.test(s.trim());
+/** A header or prose row: none of the cells after the name holds a digit. */
+const isHeaderRow = (c: string[]) => isHeaderWord(c[0]) || !c.slice(1).some((x) => /\d/.test(x));
+/** Drops list markers ChatGPT sometimes adds: "- Idli", "1. Idli". */
+const itemName = (s: string) => clean(s).replace(/^([-*•]\s+|\d+[.)]\s+)/, '').trim();
 
-function nutrition(cols: string[], name: string): EstimatedItem | null {
-  const [grams, kcal, protein, carbs, fat] = cols.slice(0, 5).map(num);
-  const fiber = cols.length > 5 ? num(cols[5]) : 0;
-  if (![grams, kcal, protein, carbs, fat].every(Number.isFinite) || kcal < 0 || grams <= 0) return null;
-  return { name, grams, kcal, protein, carbs, fat, fiber: Number.isFinite(fiber) ? fiber : 0 };
+/** cols = grams, kcal, protein, carbs, fat[, fiber]. Returns the item, or why the row is unusable. */
+function nutrition(cols: string[], name: string): EstimatedItem | string {
+  if (!name) return 'the item name is empty';
+  const v: number[] = [];
+  for (let i = 0; i < FIELDS.length; i++) {
+    const f = FIELDS[i];
+    const cell = cols[i];
+    if (cell === undefined && f === 'fiber') {
+      v.push(0);
+      continue;
+    }
+    if (!cell?.trim()) return `${f} is missing`;
+    const n = i >= 2 && isDash(cell) ? 0 : toNumber(cell);
+    if (!Number.isFinite(n)) return `${f} isn’t a number (“${cell}”)`;
+    if (n < 0) return `${f} can’t be negative`;
+    v.push(n);
+  }
+  const [grams, kcal, protein, carbs, fat, fiber] = v;
+  if (grams <= 0) return 'grams must be more than 0';
+  return { name, grams, kcal, protein, carbs, fat, fiber };
 }
 
-/** "item | grams | kcal | protein | carbs | fat | fiber" lines (markdown tables are fine). */
-export function parseMealReply(reply: string): EstimatedItem[] {
+/** One cell per line: a name followed by six number lines. */
+function stacked(lines: string[]): EstimatedItem[] {
+  const t = lines.map(clean).filter(Boolean);
   const out: EstimatedItem[] = [];
-  for (const raw of reply.split(/\r?\n/)) {
-    const c = cells(raw);
-    if (!c || c.length < 6) continue;
-    const name = c[0];
-    if (!name || isRule(name) || isHeaderWord(name)) continue;
-    const it = nutrition(c.slice(1), name);
-    if (it) out.push(it);
+  for (let i = 0; i + 6 < t.length; ) {
+    const run = t.slice(i + 1, i + 7);
+    if (!isNumberCell(t[i]) && run.every(isNumberCell)) {
+      const it = isTotal(t[i]) ? null : nutrition(run, itemName(t[i]));
+      if (it && typeof it !== 'string') out.push(it);
+      i += 7;
+    } else i++;
   }
   return out;
+}
+
+/** "item | grams | kcal | protein | carbs | fat | fiber" lines, plus the lines that look like food rows but can't be used. */
+export function readMealReply(reply: string): { items: EstimatedItem[]; errors: RowError[] } {
+  const items: EstimatedItem[] = [];
+  const errors: RowError[] = [];
+  const lines = reply.split(LINE_BREAK);
+  lines.forEach((raw, i) => {
+    const c = cells(raw);
+    if (!c || c.every(isRule) || isHeaderRow(c) || isTotal(c[0])) return;
+    const it =
+      c.length === 6 || c.length === 7
+        ? nutrition(c.slice(1), itemName(c[0]))
+        : `it has ${c.length} parts; it needs 7 (${MEAL_COLUMNS})`;
+    if (typeof it === 'string') errors.push({ line: i + 1, text: raw.trim(), reason: it });
+    else items.push(it);
+  });
+  if (!items.length && !errors.length) items.push(...stacked(lines));
+  return { items, errors };
+}
+
+export function parseMealReply(reply: string): EstimatedItem[] {
+  return readMealReply(reply).items;
+}
+
+/** "Line 4 (Oats | 80 | abc…): protein isn't a number" – the first few, for an alert. */
+export function rowErrorText(errors: RowError[], max = 3): string {
+  const short = (s: string) => (s.length > 40 ? `${s.slice(0, 40)}…` : s);
+  const lines = errors.slice(0, max).map((e) => `Line ${e.line} (${short(e.text)}): ${e.reason}`);
+  if (errors.length > max) lines.push(`…and ${errors.length - max} more`);
+  return lines.join('\n');
 }
 
 /** "day | meal | item | grams | kcal | protein | carbs | fat | fiber" → one row per day the dish is served. */
 export function parseMenuReply(reply: string): { rows: MenuRow[]; skipped: number } {
   const rows: MenuRow[] = [];
   let skipped = 0;
-  for (const raw of reply.split(/\r?\n/)) {
+  for (const raw of reply.split(LINE_BREAK)) {
     const c = cells(raw);
     if (!c || c.length < 8) continue;
     const [dayCell, mealCell, name] = c;
-    if (isRule(dayCell) || isHeaderWord(dayCell) || !name || isHeaderWord(name)) continue;
+    if (isRule(dayCell) || isHeaderWord(dayCell) || !name || isHeaderWord(name) || isTotal(name)) continue;
     const days = parseDays(dayCell);
     const slot = parseSlot(mealCell);
-    const it = nutrition(c.slice(3), name);
-    if (!days.length || !slot || !it) {
+    const it = nutrition(c.slice(3), itemName(name));
+    if (!days.length || !slot || typeof it === 'string') {
       skipped++;
       continue;
     }

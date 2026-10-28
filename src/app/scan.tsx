@@ -7,13 +7,20 @@ import { Text, TextInput } from '../components/AppText';
 import { Mascot } from '../components/Illustrations';
 import { Button, Card, Chip, IconBadge, SectionLabel, styles as ui } from '../components/ui';
 import { SLOT_LABEL, addEstimate, type Slot } from '../db/queries';
-import { mealPrompt, parseMealReply, scaleItem, type EstimatedItem } from '../lib/chatgpt';
+import { MEAL_COLUMNS, MEAL_EXAMPLE, mealPrompt, readMealReply, rowErrorText, scaleItem, type EstimatedItem, type RowError } from '../lib/chatgpt';
 import { todayKey } from '../lib/dates';
 import { sum } from '../lib/nutrition';
 import { clay, colors, radius, space, tiles, type } from '../theme';
 
 type Place = 'Home' | 'Mess' | 'Restaurant';
 type Line = EstimatedItem & { key: string; base: EstimatedItem };
+
+const toLines = (items: EstimatedItem[]): Line[] => items.map((it, i) => ({ ...it, key: `${i}`, base: it }));
+
+function alertSkipped(read: number, errors: RowError[]) {
+  if (!errors.length) return;
+  Alert.alert(`Read ${read} item${read > 1 ? 's' : ''}, skipped ${errors.length}`, `${rowErrorText(errors)}\n\nAdd skipped foods later with Quick add.`);
+}
 
 /** Scan meal: ChatGPT takes the photo and estimates; its copied table comes back here automatically. */
 export default function Scan() {
@@ -28,10 +35,24 @@ export default function Scan() {
   const [lines, setLines] = useState<Line[] | null>(null);
   const lastClip = useRef('');
 
+  const quickAdd = () => router.replace({ pathname: '/add-food', params: { date, slot, mode: 'quick' } });
+
+  /** Loads whatever rows are usable; says which lines were skipped. Returns false (input untouched) when none were. */
   const load = (txt: string) => {
-    const items = parseMealReply(txt);
-    if (items.length) setLines(items.map((it, i) => ({ ...it, key: `${i}`, base: it })));
-    return items.length;
+    const { items, errors } = readMealReply(txt);
+    if (!items.length) {
+      const how = `Each line needs 7 parts:\n${MEAL_COLUMNS}\ne.g. ${MEAL_EXAMPLE}`;
+      Alert.alert(
+        'Couldn’t read that',
+        errors.length ? `These lines need fixing:\n${rowErrorText(errors)}\n\n${how}` : `No food lines found. Copy the table ChatGPT sent.\n\n${how}`,
+        [{ text: 'Add by hand', onPress: quickAdd }, { text: 'OK', style: 'cancel' }],
+      );
+      return false;
+    }
+    setReply(txt);
+    setLines(toLines(items));
+    alertSkipped(items.length, errors);
+    return true;
   };
 
   const ask = async () => {
@@ -52,10 +73,11 @@ export default function Scan() {
         const txt = (await Clipboard.getStringAsync()) || '';
         if (!txt || txt === lastClip.current) return;
         lastClip.current = txt;
-        const items = parseMealReply(txt);
+        const { items, errors } = readMealReply(txt);
         if (items.length) {
           setReply(txt);
-          setLines(items.map((it, i) => ({ ...it, key: `${i}`, base: it })));
+          setLines(toLines(items));
+          alertSkipped(items.length, errors);
         }
       } catch {
         // "Don't Allow Paste" – the Paste button still works
@@ -67,10 +89,12 @@ export default function Scan() {
 
   const paste = async (fromClipboard: boolean) => {
     const txt = fromClipboard ? (await Clipboard.getStringAsync().catch(() => '')) || '' : reply;
-    if (fromClipboard) setReply(txt);
-    if (!load(txt)) {
-      Alert.alert('Couldn’t read that', 'Copy the whole table ChatGPT sent (lines like “Chapati | 80 | 240 | 7 | 40 | 6 | 4”) and try again.');
+    if (!txt.trim()) {
+      Alert.alert('Nothing to read', fromClipboard ? 'The clipboard is empty. In ChatGPT, tap Copy on the table, then come back.' : 'Paste ChatGPT’s table in the box first.');
+      return;
     }
+    // A failed clipboard read goes into an empty box so it can be fixed by hand; text the user typed is never replaced.
+    if (!load(txt) && fromClipboard && !reply.trim()) setReply(txt);
   };
 
   const save = async () => {
@@ -137,7 +161,7 @@ export default function Scan() {
           {[
             ['Open ChatGPT', 'the question is filled in (and copied)'],
             ['Tap ＋ → Camera', 'fit the whole plate in, then send'],
-            ['Tap Copy under the reply', 'switch back here: it loads by itself'],
+            ['Tap Copy on the table', 'switch back here: it loads by itself'],
           ].map(([a, b], i) => (
             <View key={a} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: i < 2 ? space.md : 0 }}>
               <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: [tiles.green, tiles.yellow, tiles.blue][i].badge, alignItems: 'center', justifyContent: 'center', boxShadow: clay.badge, marginRight: space.md }}>
@@ -172,10 +196,13 @@ export default function Scan() {
               value={reply}
               onChangeText={setReply}
               multiline
-              placeholder={'…or paste it here:\nChapati | 80 | 240 | 7 | 40 | 6 | 4'}
+              placeholder={`…or paste it here:\n${MEAL_EXAMPLE}`}
               style={[ui.input, { height: 110, paddingTop: 12, textAlignVertical: 'top', marginTop: space.sm }]}
             />
             {reply.trim().length > 0 && <Button title="Read answer" variant="ghost" onPress={() => paste(false)} style={{ marginTop: space.sm }} />}
+            <Pressable onPress={quickAdd} accessibilityRole="button" style={{ marginTop: space.md, alignSelf: 'center' }}>
+              <Text style={{ color: colors.tealDeep, fontWeight: '700' }}>No table? Add it by hand</Text>
+            </Pressable>
           </Card>
         )}
       </ScrollView>

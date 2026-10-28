@@ -12,19 +12,20 @@ import {
   type Food, type Slot,
 } from '../db/queries';
 import { todayKey } from '../lib/dates';
+import { validateFoodEntry, type EntryField, type EntryInput } from '../lib/foodEntry';
 import { DAYS, PORTIONS, dowOfKey, portionFactor, type Portion as Level } from '../lib/menu';
-import { forGrams } from '../lib/nutrition';
+import { forGrams, type Nutrients } from '../lib/nutrition';
 import { clay, colors, radius, space, tiles, type } from '../theme';
 
 type Mode = 'search' | 'portion' | 'quick' | 'menu';
 
 export default function AddFood() {
   const db = useSQLiteContext();
-  const params = useLocalSearchParams<{ date?: string; slot?: Slot; mode?: 'menu' }>();
+  const params = useLocalSearchParams<{ date?: string; slot?: Slot; mode?: 'menu' | 'quick' }>();
   const date = params.date ?? todayKey();
   const slot: Slot = params.slot ?? 'lunch';
 
-  const [mode, setMode] = useState<Mode>(params.mode === 'menu' ? 'menu' : 'search');
+  const [mode, setMode] = useState<Mode>(params.mode === 'menu' || params.mode === 'quick' ? params.mode : 'search');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Food[]>([]);
   const [recents, setRecents] = useState<Food[]>([]);
@@ -63,9 +64,9 @@ export default function AddFood() {
       if (saveAsFood && v.name) {
         // Saved as a custom food per serving (100 g basis = 1 serving) so it shows up in search and recents.
         const id = await createCustomFood(db, { ...v, unit: 'serving', unitGrams: 100 });
-        await addFoodToMeal(db, date, slot, { id, name: v.name, source: 'custom', kcal: v.kcal, protein: v.protein, carbs: v.carbs, fat: v.fat, fiber: 0, unit: 'serving', unit_grams: 100 }, 1, true);
+        await addFoodToMeal(db, date, slot, { id, name: v.name, source: 'custom', kcal: v.kcal, protein: v.protein, carbs: v.carbs, fat: v.fat, fiber: v.fiber, unit: 'serving', unit_grams: 100 }, 1, true);
       } else {
-        await quickAdd(db, date, slot, v.name, { ...v, fiber: 0 });
+        await quickAdd(db, date, slot, v.name, v);
       }
       router.back();
     }} />;
@@ -166,14 +167,14 @@ function Portion({ food, slotLabel, onBack, onAdd }: { food: Food; slotLabel: st
   );
 }
 
-function QuickAdd({ onBack, onSave }: { onBack: () => void; onSave: (v: { name: string; kcal: number; protein: number; carbs: number; fat: number }, saveAsFood: boolean) => void }) {
-  const [name, setName] = useState('');
-  const [kcal, setKcal] = useState('');
-  const [protein, setProtein] = useState('');
-  const [carbs, setCarbs] = useState('');
-  const [fat, setFat] = useState('');
+function QuickAdd({ onBack, onSave }: { onBack: () => void; onSave: (v: Nutrients & { name: string }, saveAsFood: boolean) => void }) {
+  const [input, setInput] = useState<EntryInput>({ name: '', kcal: '', protein: '', carbs: '', fat: '', fiber: '' });
   const [save, setSave] = useState(false);
-  const num = (s: string) => Math.max(0, Number(s.replace(',', '.')) || 0);
+  const [tried, setTried] = useState(false);
+  const { value, errors } = validateFoodEntry(input, { requireName: save });
+  const field = (f: EntryField, label: string, numeric = true) => (
+    <Field label={label} value={input[f]} onChange={(t) => setInput((x) => ({ ...x, [f]: t }))} numeric={numeric} error={tried ? errors[f] : undefined} />
+  );
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -182,29 +183,40 @@ function QuickAdd({ onBack, onSave }: { onBack: () => void; onSave: (v: { name: 
           <Text style={{ color: colors.steel, fontWeight: '600', marginBottom: space.md }}>‹ Back to search</Text>
         </Pressable>
         <Text style={[type.h1, { marginBottom: space.lg }]}>Quick add</Text>
-        <Field label="Name (optional)" value={name} onChange={setName} />
-        <Field label="Calories (kcal)" value={kcal} onChange={setKcal} numeric />
-        <Field label="Protein (g)" value={protein} onChange={setProtein} numeric />
-        <Field label="Carbs (g)" value={carbs} onChange={setCarbs} numeric />
-        <Field label="Fat (g)" value={fat} onChange={setFat} numeric />
+        {field('name', save ? 'Name' : 'Name (optional)', false)}
+        {field('kcal', 'Calories (kcal)')}
+        {field('protein', 'Protein (g, optional)')}
+        {field('carbs', 'Carbs (g, optional)')}
+        {field('fat', 'Fat (g, optional)')}
+        {field('fiber', 'Fiber (g, optional)')}
         <View style={{ flexDirection: 'row', marginBottom: space.md }}>
           <Chip label="Save as my food" selected={save} onPress={() => setSave(!save)} />
         </View>
         <Button
           title="Add"
-          disabled={num(kcal) <= 0 || (save && !name.trim())}
-          onPress={() => onSave({ name: name.trim(), kcal: num(kcal), protein: num(protein), carbs: num(carbs), fat: num(fat) }, save)}
+          onPress={() => {
+            setTried(true);
+            if (value) onSave(value, save);
+          }}
         />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-function Field({ label, value, onChange, numeric }: { label: string; value: string; onChange: (s: string) => void; numeric?: boolean }) {
+function Field({ label, value, onChange, numeric, error }: { label: string; value: string; onChange: (s: string) => void; numeric?: boolean; error?: string }) {
   return (
     <View style={{ marginBottom: space.md }}>
       <Text style={[type.label, { marginBottom: 6 }]}>{label}</Text>
-      <TextInput value={value} onChangeText={onChange} keyboardType={numeric ? 'decimal-pad' : 'default'} style={ui.input} />
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        keyboardType={numeric ? 'decimal-pad' : 'default'}
+        style={[ui.input, error ? { borderWidth: 2, borderColor: colors.danger } : null]}
+        accessibilityLabel={label}
+        accessibilityHint={error}
+      />
+      {error && <Text style={{ color: colors.danger, fontSize: 13, fontWeight: '600', marginTop: 4 }}>{error}</Text>}
     </View>
   );
 }
